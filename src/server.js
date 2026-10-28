@@ -267,7 +267,7 @@ if (require.main === module) {
   const suggester = new Suggester({
     library,
     drive,
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.ANTHROPIC_API_KEY?.trim(),
     model: process.env.SUGGEST_MODEL || DEFAULT_MODEL,
     fields: process.env.SUGGEST_FIELDS ? process.env.SUGGEST_FIELDS.split(/[\s,]+/).filter(Boolean) : undefined,
     concurrency: Number(process.env.SUGGEST_CONCURRENCY) || 4,
