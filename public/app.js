@@ -263,9 +263,27 @@ function renderFolderPanel() {
   $('folder-editor').replaceChildren(tagEditor({
     tags, apply: applyTo([folder.id]), emptyText: 'No tags on this folder yet.',
   }));
+  // Shoot-level suggestions (one request from a few samples), then per-photo ones.
+  const folderAi = $('folder-ai');
+  if (folder.suggestions || state.ai.enabled) {
+    folderAi.replaceChildren(suggestionBox({
+      id: folder.id,
+      s: folder.suggestions,
+      title: '✨ Shoot tags suggested by Claude',
+      runLabel: `Suggest shoot tags from ${Math.min(6, folder.count)} sample photos`,
+      run: async () => {
+        await api(`/api/suggest/folder/${encodeURIComponent(folder.id)}/run`, {});
+        await loadFolders();
+        refreshAi();
+      },
+    }));
+  } else {
+    folderAi.replaceChildren();
+  }
   const suggest = $('folder-suggest');
   suggest.hidden = !state.ai.enabled;
-  suggest.textContent = `✨ Suggest tags for the ${folder.count.toLocaleString()} assets in this folder`;
+  suggest.textContent = `✨ Suggest tags for each of the ${folder.count.toLocaleString()} photos` +
+    (folder.count > (state.ai.batchMin ?? 50) ? ' (batch, half price)' : '');
   suggest.onclick = () => queueSuggestions({ folder: folder.id }, folder.count);
 }
 
@@ -469,23 +487,36 @@ async function refreshAi() {
   } catch {
     state.ai = { enabled: false };
   }
-  $('suggested').hidden = !state.ai.enabled && !state.suggested;
-  const busy = state.ai.queued + state.ai.running > 0;
+  const ai = state.ai;
+  $('suggested').hidden = !ai.enabled && !state.suggested;
+  const active = (ai.queued || 0) + (ai.running || 0) > 0 || Boolean(ai.preparing);
+  const batches = ai.batches || [];
+  const busy = active || batches.length > 0;
   const bar = $('ai-status');
-  const cost = state.ai.costUsd != null ? ` · ≈ $${state.ai.costUsd.toFixed(2)} so far` : '';
+  const cost = ai.costUsd != null ? ` · ≈ $${ai.costUsd.toFixed(2)} so far` : '';
+  const stop = el('button', { type: 'button', class: 'link', text: 'Stop', onclick: async () => {
+    if (!confirm('Stop suggesting tags? Photos already done keep their suggestions.')) return;
+    await api('/api/suggest/cancel', {});
+    refreshAi();
+  } });
   if (busy) {
+    const lines = [];
+    if (ai.preparing) lines.push(`Preparing a batch: ${ai.preparing.done} of ${ai.preparing.total} previews`);
+    if ((ai.queued || 0) + (ai.running || 0)) lines.push(`Claude is suggesting tags: ${ai.queued + ai.running} to go`);
+    for (const b of batches) {
+      const done = (b.succeeded || 0) + (b.errored || 0);
+      lines.push(`Batch of ${b.count} photos sent ${new Date(b.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` +
+        ` (half price${done ? `, ${done} done` : ''}). Results usually arrive within an hour; you can close this page`);
+    }
     bar.hidden = false;
-    bar.replaceChildren(
-      el('span', { text: `✨ Claude is suggesting tags: ${state.ai.done} done, ${state.ai.queued + state.ai.running} to go${state.ai.failed ? `, ${state.ai.failed} failed` : ''}${cost}` }),
-      el('button', { type: 'button', class: 'link', text: 'Stop', onclick: async () => { await api('/api/suggest/cancel', {}); refreshAi(); } }),
-    );
-    // Show new results as they come in.
-    if (++refreshAi.ticks % 4 === 0) reloadInPlace();
-    refreshAi.timer = setTimeout(refreshAi, 3000);
+    bar.replaceChildren(el('span', { text: `✨ ${lines.join(' · ')}${cost}` }), stop);
+    // Show new results as they come in; batches change slowly, so check them less often.
+    if (active && ++refreshAi.ticks % 4 === 0) reloadInPlace();
+    refreshAi.timer = setTimeout(refreshAi, active ? 3000 : 30000);
   } else if (state.aiWasBusy) {
     bar.hidden = false;
     bar.replaceChildren(
-      el('span', { text: `✨ Done: ${state.ai.done} suggested${state.ai.failed ? `, ${state.ai.failed} failed (${state.ai.lastError})` : ''}${cost}.` }),
+      el('span', { text: `✨ Done: ${ai.done} suggested${ai.failed ? `, ${ai.failed} failed (${ai.lastError})` : ''}${cost}.` }),
       el('button', { type: 'button', class: 'link', text: 'Review suggestions', onclick: () => {
         state.suggested = 'pending';
         $('suggested').value = 'pending';
@@ -495,6 +526,7 @@ async function refreshAi() {
       el('button', { type: 'button', class: 'link', text: 'Hide', onclick: () => { bar.hidden = true; } }),
     );
     reloadInPlace();
+    loadFolders();
   }
   state.aiWasBusy = busy;
   renderFolderPanel();
@@ -504,11 +536,16 @@ refreshAi.ticks = 0;
 
 async function queueSuggestions(body, count) {
   const each = state.ai.estimatePerImage;
-  const estimate = each ? ` It costs roughly $${(each * count).toFixed(2)} (about $${each.toFixed(3)} per image).` : '';
-  if (!confirm(`Ask Claude to suggest tags for up to ${count.toLocaleString()} assets?${estimate}\n\nAssets that already have suggestions are skipped. You review everything before it becomes a tag.`)) return;
+  const batch = count > (state.ai.batchMin ?? 50);
+  const total = each ? each * count * (batch ? 0.5 : 1) : null;
+  const estimate = total != null ? ` Estimated cost: about $${total < 0.01 ? total.toFixed(3) : total.toFixed(2)}.` : '';
+  const how = batch
+    ? 'More than 50 photos run as a batch at half price. Results usually arrive within an hour (at most 24 hours), and you can close this page meanwhile.'
+    : 'They run right away.';
+  if (!confirm(`Ask Claude to suggest tags for up to ${count.toLocaleString()} photos?${estimate}\n\n${how}\n\nPhotos that already have suggestions are skipped. You review everything before it becomes a tag.`)) return;
   try {
     const res = await api('/api/suggest', body);
-    if (!res.added) alert('Nothing to do: these assets already have suggestions (or have no preview).');
+    if (!res.added) alert('Nothing to do: these photos already have suggestions (or have no preview).');
     state.aiWasBusy = state.aiWasBusy || res.added > 0;
   } catch (err) {
     alert(err.message);
@@ -519,31 +556,25 @@ async function queueSuggestions(body, count) {
 const accept = async (body) => { await api('/api/suggest/accept', body); await afterEdit(); };
 const dismiss = async (body) => { await api('/api/suggest/dismiss', body); await afterEdit(); };
 
-function renderSuggestions(asset) {
-  const box = $('d-suggest');
-  const s = asset.suggestions;
-  if (!s && !state.ai.enabled) return box.replaceChildren();
-
-  const run = async (button) => {
-    button.disabled = true;
-    button.textContent = 'Asking Claude…';
-    try {
-      const fresh = await api(`/api/suggest/${asset.id}/run`, {});
-      state.current = fresh;
-      state.items.set(fresh.id, fresh);
-      grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
-      renderSuggestions(fresh);
-      refreshAi();
-    } catch (err) {
-      button.disabled = false;
-      button.textContent = err.message;
-    }
-  };
-  const runButton = (label) => el('button', { class: 'btn ghost', type: 'button', text: label, onclick: (e) => run(e.target) });
-
-  const parts = [el('div', { class: 'suggest-head' }, [el('span', { text: '✨ Suggested by Claude' })])];
+// Claude's suggestions for an asset or a folder: accept/dismiss each value,
+// accept or dismiss all, or ask (again). `run()` makes the request and redraws.
+function suggestionBox({ id, s, run, runLabel = 'Suggest tags', title = '✨ Suggested by Claude' }) {
+  const runButton = (label) => el('button', {
+    class: 'btn ghost', type: 'button', text: label,
+    onclick: async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'Asking Claude…';
+      try {
+        await run();
+      } catch (err) {
+        e.target.disabled = false;
+        e.target.textContent = err.message;
+      }
+    },
+  });
+  const parts = [el('div', { class: 'suggest-head' }, [el('span', { text: title })])];
   if (!s) {
-    parts.push(el('div', { class: 'row-actions' }, [runButton('Suggest tags')]));
+    parts.push(el('div', { class: 'row-actions' }, [runButton(runLabel)]));
   } else if (s.error) {
     parts.push(el('p', { class: 'err', text: s.error }));
     if (state.ai.enabled) parts.push(el('div', { class: 'row-actions' }, [runButton('Try again')]));
@@ -554,19 +585,36 @@ function renderSuggestions(asset) {
       el('div', { class: 'chips' }, s.pending[f.key].map((value) => el('span', { class: 'chip suggested' }, [
         value,
         el('button', { type: 'button', class: 'ok', title: 'Accept', 'aria-label': `Accept ${value}`, text: '✓',
-          onclick: () => accept({ ids: [asset.id], field: f.key, value }) }),
+          onclick: () => accept({ ids: [id], field: f.key, value }) }),
         el('button', { type: 'button', title: 'Dismiss', 'aria-label': `Dismiss ${value}`, text: '×',
-          onclick: () => dismiss({ id: asset.id, field: f.key, value }) }),
+          onclick: () => dismiss({ id, field: f.key, value }) }),
       ]))),
     ]));
     parts.push(...(rows.length ? rows : [el('p', { class: 'empty-note', text: 'All suggestions reviewed.' })]));
     parts.push(el('div', { class: 'row-actions' }, [
-      s.count ? el('button', { class: 'btn', type: 'button', text: 'Accept all', onclick: () => accept({ ids: [asset.id] }) }) : '',
-      s.count ? el('button', { class: 'btn ghost', type: 'button', text: 'Dismiss all', onclick: () => dismiss({ ids: [asset.id] }) }) : '',
+      s.count ? el('button', { class: 'btn', type: 'button', text: 'Accept all', onclick: () => accept({ ids: [id] }) }) : '',
+      s.count ? el('button', { class: 'btn ghost', type: 'button', text: 'Dismiss all', onclick: () => dismiss({ ids: [id] }) }) : '',
       state.ai.enabled ? runButton('Ask again') : '',
     ]));
   }
-  box.replaceChildren(el('div', { class: 'suggest' }, parts));
+  return el('div', { class: 'suggest' }, parts);
+}
+
+function renderSuggestions(asset) {
+  const box = $('d-suggest');
+  if (!asset.suggestions && !state.ai.enabled) return box.replaceChildren();
+  box.replaceChildren(suggestionBox({
+    id: asset.id,
+    s: asset.suggestions,
+    run: async () => {
+      const fresh = await api(`/api/suggest/${asset.id}/run`, {});
+      state.current = fresh;
+      state.items.set(fresh.id, fresh);
+      grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
+      renderSuggestions(fresh);
+      refreshAi();
+    },
+  }));
 }
 
 // ---------- viewer ----------

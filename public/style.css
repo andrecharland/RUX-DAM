@@ -253,3 +253,5 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .vocab-body .r-field { margin: 0; }
 .vocab-import { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .vocab-import .btn { cursor: pointer; }
+.folder-ai:not(:empty) { margin-top: 12px; }
+.folder-ai .suggest { margin-bottom: 0; }

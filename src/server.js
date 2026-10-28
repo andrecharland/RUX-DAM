@@ -155,13 +155,25 @@ function createApp({ library, drive, password, suggester }) {
     } else {
       return res.status(400).json({ error: 'Pass ids or a known folder' });
     }
-    const added = suggester.enqueue(targets, { force: Boolean(force) });
-    res.json({ ...suggester.status(), added });
+    // More than 50 photos go to a half-price batch; fewer run right away.
+    const { added, batch } = suggester.submit(targets, { force: Boolean(force) });
+    res.json({ ...suggester.status(), added, batch });
   });
 
-  app.post('/api/suggest/cancel', needSuggester, (req, res) => {
-    suggester.cancel();
+  app.post('/api/suggest/cancel', needSuggester, async (req, res) => {
+    await suggester.cancel();
     res.json(suggester.status());
+  });
+
+  // Shoot-level suggestions for a folder, from a few sample photos (one request).
+  app.post('/api/suggest/folder/:id/run', needSuggester, async (req, res) => {
+    if (!library.folders.has(req.params.id)) return res.sendStatus(404);
+    try {
+      await suggester.runFolder(req.params.id);
+    } catch (err) {
+      // Recorded on the folder's suggestions and shown in the folder panel.
+    }
+    res.json(library.folderList().find((f) => f.id === req.params.id));
   });
 
   // Suggest for one asset right away (from the viewer).
@@ -181,9 +193,10 @@ function createApp({ library, drive, password, suggester }) {
   app.post('/api/suggest/accept', express.json(), async (req, res, next) => {
     const { ids, field, value } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids must be a non-empty list' });
-    if (ids.some((id) => !library.has(id))) return res.sendStatus(404);
+    if (ids.some((id) => !library.has(id) && !library.folders.has(id))) return res.sendStatus(404);
     const changes = ids.map((id) => {
-      const pending = library.view(library.byId.get(id)).suggestions?.pending || {};
+      const item = library.byId.get(id) || library.folders.get(id);
+      const pending = library.suggestions.remaining(id, library.tags.resolve(item));
       if (field) {
         const hit = (pending[field] || []).find((v) => v.toLowerCase() === String(value).toLowerCase());
         return { id, add: hit ? { [field]: [hit] } : {} };
@@ -203,10 +216,10 @@ function createApp({ library, drive, password, suggester }) {
   app.post('/api/suggest/dismiss', express.json(), (req, res) => {
     const { id, ids, field, value } = req.body || {};
     if (id && field && value != null) {
-      if (!library.has(id)) return res.sendStatus(404);
+      if (!library.has(id) && !library.folders.has(id)) return res.sendStatus(404);
       library.suggestions.dismiss(id, field, String(value));
     } else if (Array.isArray(ids)) {
-      for (const i of ids) if (library.has(i)) library.suggestions.dismissAll(i);
+      for (const i of ids) if (library.has(i) || library.folders.has(i)) library.suggestions.dismissAll(i);
     } else {
       return res.status(400).json({ error: 'Pass { id, field, value } or { ids }' });
     }
@@ -288,7 +301,8 @@ if (require.main === module) {
   if (!suggester.enabled) console.warn('ANTHROPIC_API_KEY is not set: tag suggestions are off.');
   // Each sync reloads the rights flags and tags too. Saves are conditional on the stored
   // object's generation, so a failed load can't cause an edit to overwrite them.
-  library.start();
+  // Once loaded, collect results of batches submitted before a restart and keep checking.
+  library.start().then(() => suggester.startPolling());
   const app = createApp({ library, drive, suggester, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));

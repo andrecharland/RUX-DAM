@@ -54,7 +54,7 @@ The server only serves files that are in the index.
 | `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`), usage rights (`rights.json`), Claude's suggestions (`suggestions.json`) and the last synced asset list (`index.json`). Without it, all of these are lost on every restart or deploy. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
 | `ANTHROPIC_API_KEY` | no | Claude API key. Turns on tag suggestions |
-| `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-opus-5-5` |
+| `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-haiku-5-5` (`claude-sonnet-5-5` or `claude-opus-5-5` for higher accuracy at higher cost) |
 | `SUGGEST_FIELDS` | no | Fields Claude fills in, default `product,activity,color,vehicle,season,tags` |
 | `SUGGEST_CONCURRENCY` | no | Images sent to Claude in parallel, default `4` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
@@ -114,21 +114,36 @@ and moves inside the indexed folders.
 
 ## Tag suggestions from Claude
 
-With `ANTHROPIC_API_KEY` set, Claude looks at each asset's preview (a 1024px Drive
-thumbnail; for videos, the poster frame) along with its file name and folder path, and
-suggests values for Product, Activity, Color, Vehicle, Season and Tags, plus a one-line
-description that search also matches. It reuses values already in use, so the more you
-tag, the more consistent its suggestions become. Nothing becomes a tag until you accept it.
+With `ANTHROPIC_API_KEY` set, Claude looks at previews (768px Drive thumbnails; for videos,
+the poster frame) along with file and folder names, and suggests metadata plus a one-line
+description that search also matches. It reuses values already in use and your preset values
+(see below), so suggestions stay consistent. Nothing becomes a tag until you accept it.
 
-- **One asset**: open it and click **Suggest tags**.
-- **A folder**: select it and click **✨ Suggest tags for the N assets in this folder**.
-- **A selection**: select assets and click **✨ Suggest tags** in the bottom bar.
+The cheapest way to tag a library, in order:
 
-Runs happen in the background; a bar shows progress and the running cost, and **Stop**
-cancels what's left. Assets that already have suggestions are skipped. Then choose
-**✨ Suggestions to review** in the header: suggested values show in purple on each card.
-In the viewer, ✓ accepts a value, × dismisses it, or use **Accept all**. To accept everything
-for many assets at once, select them and click **Accept suggestions**.
+1. **Shoot tags (one request per folder).** Select a shoot folder and click **Suggest shoot tags
+   from 6 sample photos**. Claude looks at up to 6 photos spread across the folder and suggests
+   Activity, Season, Location, Event, Vehicle and Tags that fit the whole shoot. Accept them and
+   every photo in the folder inherits them.
+2. **Per-photo tags.** **✨ Suggest tags for each of the N photos** (or **✨ Suggest tags** on a
+   selection, or **Suggest tags** in the viewer) fills in what varies per photo, like Product and
+   Color. Values already inherited from the folder aren't suggested again.
+   - Up to 50 photos run right away.
+   - **More than 50 photos run through the Message Batches API at half price.** Results usually
+     arrive within an hour (at most 24 hours). Batches are tracked in the data bucket, so results
+     are collected even if the service restarts; the page can be closed meanwhile.
+
+A bar shows progress, running batches and the running cost; **Stop** cancels queued work and
+running batches. Photos that already have suggestions are skipped. To review, choose
+**✨ Suggestions to review** in the header: suggested values show in purple on each card. In the
+viewer (or folder panel), ✓ accepts a value, × dismisses it, or use **Accept all**; to accept
+everything for many photos, select them and click **Accept suggestions**.
+
+**Cost.** The default model is Claude Haiku 5.5: roughly $0.0004 per photo, so about $4 per 10,000
+photos, and half that in batches. Instructions and the vocabulary come first in every request and
+are cached, so after the first request they cost about a tenth. For higher accuracy (e.g. telling
+similar products apart) set `SUGGEST_MODEL=claude-sonnet-5-5` (~20× the cost) or `claude-opus-5-5`
+(~40×); the cost estimates in the app follow the model.
 
 Suggestions are stored as `suggestions.json` in the data bucket.
 

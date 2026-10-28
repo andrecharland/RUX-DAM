@@ -190,6 +190,7 @@ class Library {
       count: counts.get(f.id) || 0,
       tags: this.tags.own(f.id),
       rights: this.rights.get(f.id),
+      suggestions: this.suggestions.resolve(f.id, this.tags.resolve(f)),
     }));
   }
 
