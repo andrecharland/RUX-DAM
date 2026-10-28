@@ -90,6 +90,16 @@ function createApp({ library, drive, password, suggester }) {
     }
   });
 
+  // Replace a field's preset values: { values: [...] }
+  app.post('/api/fields/:key/presets', express.json({ limit: '1mb' }), async (req, res, next) => {
+    try {
+      res.json({ presets: await library.tags.setPresets(req.params.key, req.body?.values) });
+    } catch (err) {
+      if (err instanceof RangeError) return res.status(400).json({ error: err.message });
+      next(err);
+    }
+  });
+
   // Add/remove metadata on indexed files and folders:
   // { ids: [...], add: { field: [values] }, remove: { field: [values] } }
   app.post('/api/tags', express.json(), async (req, res, next) => {

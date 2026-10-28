@@ -239,3 +239,17 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
 .suggest .row-actions .btn { padding: 6px 10px; font-size: 13px; }
 .bulk-ai { display: flex; gap: 8px; }
 .bulk-ai .btn { color: var(--ai); border-color: var(--ai); }
+
+/* Field values editor */
+.side-links { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height: calc(100vh - 32px); }
+.vocab-body { padding: 24px; position: relative; display: flex; flex-direction: column; gap: 12px; }
+.vocab-body h2 { margin: 0; font-size: 18px; }
+.vocab-body .hint { margin: 0; }
+.vocab-body textarea {
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical;
+}
+.vocab-body .r-field { margin: 0; }
+.vocab-import { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.vocab-import .btn { cursor: pointer; }

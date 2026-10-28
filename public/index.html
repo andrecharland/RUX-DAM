@@ -40,7 +40,10 @@
           <button id="clear-filters" class="link" type="button" hidden>Clear</button>
         </div>
         <div id="facets"></div>
-        <button id="add-field" class="link" type="button">+ Add a field</button>
+        <div class="side-links">
+          <button id="add-field" class="link" type="button">+ Add a field</button>
+          <button id="edit-values" class="link" type="button">Edit field values</button>
+        </div>
       </section>
     </aside>
 
@@ -114,6 +117,29 @@
     </div>
   </dialog>
 
+  <dialog id="vocab" class="vocab">
+    <div class="vocab-body">
+      <button id="v-close" class="close" type="button" aria-label="Close">×</button>
+      <h2>Field values</h2>
+      <p class="hint">Values listed here appear in autocomplete, and Claude uses these exact names when it suggests tags, even before anything is tagged with them. One per line.</p>
+      <label class="r-field">Field
+        <select id="v-field"></select>
+      </label>
+      <textarea id="v-values" rows="14" spellcheck="false" aria-label="Values, one per line"></textarea>
+      <div class="vocab-import">
+        <label class="btn ghost">Import a Shopify products CSV
+          <input id="v-csv" type="file" accept=".csv,text/csv" hidden>
+        </label>
+        <span id="v-msg" class="hint" role="status"></span>
+      </div>
+      <div class="r-buttons">
+        <button id="v-save" class="btn" type="button">Save</button>
+        <button id="v-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/shopify.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

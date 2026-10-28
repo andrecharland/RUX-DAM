@@ -17,7 +17,7 @@ const MAX_PER_FIELD = 10;
 const MAX_VOCAB = 200;
 
 const FIELD_GUIDE = {
-  product: 'RUX products or other gear clearly visible (e.g. Duffel, Gear Box, Cooler, Roof Rack, Strap).',
+  product: 'RUX products or other gear clearly visible. When a product matches one in the vocabulary (the RUX catalog), use that exact name; otherwise a short generic name (e.g. Duffel, Gear Box, Roof Rack).',
   activity: 'What people are doing, or the activity the scene is about (e.g. Mountain Biking, Camping, Skiing, Overlanding, Road Trip, Fishing). Use Studio for plain product shots.',
   color: 'Main colors of the featured product(s), not the background.',
   vehicle: 'Vehicle make and model when clearly identifiable from badging or design (e.g. Toyota Tacoma, Rivian R1T); otherwise the type (Pickup Truck, SUV, Van). Empty if no vehicle.',

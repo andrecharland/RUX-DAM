@@ -704,6 +704,78 @@ $('add-field').addEventListener('click', async () => {
     alert(err.message);
   }
 });
+// ---------- field values (presets) ----------
+
+const vocab = { edits: {}, current: '' };
+const lines = (text) => text.split('\n').map((v) => v.trim()).filter(Boolean);
+
+function showVocabField(key) {
+  if (vocab.current) vocab.edits[vocab.current] = $('v-values').value;
+  vocab.current = key;
+  const field = state.fields.find((f) => f.key === key);
+  $('v-values').value = vocab.edits[key] ?? field.presets.join('\n');
+  $('v-field').value = key;
+}
+
+$('edit-values').addEventListener('click', () => {
+  vocab.edits = {};
+  vocab.current = '';
+  $('v-field').replaceChildren(...state.fields.map((f) => el('option', { value: f.key, text: f.label })));
+  $('v-msg').textContent = '';
+  showVocabField(state.fields.some((f) => f.key === 'product') ? 'product' : state.fields[0].key);
+  $('vocab').showModal();
+});
+$('v-field').addEventListener('change', (e) => showVocabField(e.target.value));
+$('v-close').addEventListener('click', () => $('vocab').close());
+$('v-cancel').addEventListener('click', () => $('vocab').close());
+
+$('v-csv').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const { products, colors, skipped } = ShopifyImport.fromShopifyCsv(await file.text());
+    vocab.edits[vocab.current] = $('v-values').value;
+    // Merge with what's already listed, keeping existing spellings.
+    const merge = (key, values) => {
+      const field = state.fields.find((f) => f.key === key);
+      if (!field) return 0;
+      const current = lines(vocab.edits[key] ?? field.presets.join('\n'));
+      const have = new Set(current.map((v) => v.toLowerCase()));
+      const added = values.filter((v) => !have.has(v.toLowerCase()));
+      vocab.edits[key] = [...current, ...added].join('\n');
+      return added.length;
+    };
+    const p = merge('product', products);
+    const c = merge('color', colors);
+    vocab.current = '';
+    showVocabField('product');
+    $('v-msg').textContent = `Found ${products.length} products and ${colors.length} colors (${p} and ${c} new)` +
+      `${skipped ? `; skipped ${skipped} draft or archived products` : ''}. Review both lists, then Save.`;
+  } catch (err) {
+    $('v-msg').textContent = err.message;
+  }
+});
+
+$('v-save').addEventListener('click', async () => {
+  vocab.edits[vocab.current] = $('v-values').value;
+  $('v-msg').textContent = 'Saving…';
+  try {
+    for (const [key, text] of Object.entries(vocab.edits)) {
+      const field = state.fields.find((f) => f.key === key);
+      if (lines(text).join('\n') === field.presets.join('\n')) continue;
+      await api(`/api/fields/${encodeURIComponent(key)}/presets`, { values: lines(text) });
+    }
+    await loadFields();
+    renderFacets();
+    renderFolderPanel();
+    renderBulk();
+    $('vocab').close();
+  } catch (err) {
+    $('v-msg').textContent = err.message;
+  }
+});
+
 $('toggle-side').addEventListener('click', (e) => {
   e.stopPropagation();
   document.body.classList.toggle('side-open');

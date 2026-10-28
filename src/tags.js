@@ -48,7 +48,8 @@ class TagStore {
     return new Set(this.data.fields.map((f) => f.key));
   }
 
-  // Fields with every value currently in use (plus suggestions), for autocomplete.
+  // Fields with every value currently in use plus their preset values, for
+  // autocomplete and Claude's vocabulary. `presets` is the editable preset list.
   fields() {
     const used = new Map(this.data.fields.map((f) => [f.key, new Set(f.suggest || [])]));
     for (const tags of Object.values(this.data.tags)) {
@@ -60,7 +61,26 @@ class TagStore {
       key: f.key,
       label: f.label,
       values: [...used.get(f.key)].sort((a, b) => a.localeCompare(b)),
+      presets: f.suggest || [],
     }));
+  }
+
+  // Replaces a field's preset values (e.g. the product catalog), which are
+  // offered before anything is tagged with them.
+  async setPresets(key, values) {
+    if (!this.fieldKeys().has(key)) throw new RangeError(`Unknown field: ${key}`);
+    if (!Array.isArray(values) || values.length > 2000) throw new RangeError('values must be a list of up to 2000');
+    const seen = new Map();
+    for (const raw of values) {
+      const v = String(raw).trim().slice(0, MAX_VALUE);
+      if (v && !seen.has(v.toLowerCase())) seen.set(v.toLowerCase(), v);
+    }
+    const presets = [...seen.values()];
+    await this.store.update((data) => {
+      const field = data.fields.find((f) => f.key === key);
+      if (field) field.suggest = presets;
+    });
+    return presets;
   }
 
   async addField(label) {

@@ -127,6 +127,15 @@ for many assets at once, select them and click **Accept suggestions**.
 
 Suggestions are stored as `suggestions.json` in the data bucket.
 
+### Product catalog and preset values
+
+**Edit field values** (sidebar) holds a preset list per field: these appear in autocomplete,
+and Claude uses these exact names when suggesting tags, even before anything is tagged with
+them. To load the RUX catalog, export products from Shopify (**Products → Export → All
+products, CSV for Excel, Numbers, or other spreadsheet programs**) and click **Import a
+Shopify products CSV**. It adds every active product's title to Product and every value of a
+Color/Colour option to Color; review and edit both lists, then **Save**.
+
 **Cost**: about $0.02 per image with the default model (≈2,000 input and ≈600 output
 tokens), so ~$100 per 5,000 images. `SUGGEST_MODEL=claude-sonnet-5-5` roughly halves that and
 `claude-haiku-5-5` is far cheaper, with less accurate results; try a folder first and compare.
