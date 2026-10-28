@@ -9,6 +9,7 @@ const { DriveClient } = require('./drive');
 const { Library } = require('./library');
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
+const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -48,7 +49,7 @@ async function pipeDrive(driveRes, res, passHeaders) {
   Readable.fromWeb(driveRes.body).on('error', () => res.destroy()).pipe(res);
 }
 
-function createApp({ library, drive, password }) {
+function createApp({ library, drive, password, suggester }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -65,6 +66,7 @@ function createApp({ library, drive, password }) {
       folder: String(req.query.folder || ''),
       rights: String(req.query.rights || ''),
       tags: [].concat(req.query.tag || []).map(String),
+      suggested: String(req.query.suggested || ''),
       offset,
       limit,
     }));
@@ -121,6 +123,83 @@ function createApp({ library, drive, password }) {
     } catch (err) {
       next(err);
     }
+  });
+
+  // ----- Suggestions from Claude -----
+
+  app.get('/api/suggest/status', (req, res) => {
+    res.json(suggester ? suggester.status() : { enabled: false });
+  });
+
+  const needSuggester = (req, res, next) => (suggester?.enabled ? next()
+    : res.status(503).json({ error: 'Set ANTHROPIC_API_KEY to enable suggestions' }));
+
+  // Queue assets: { ids: [...] } or { folder: id }, optionally { force: true } to redo.
+  app.post('/api/suggest', express.json(), needSuggester, (req, res) => {
+    const { ids, folder, force } = req.body || {};
+    let targets = [];
+    if (Array.isArray(ids)) targets = ids.map(String);
+    else if (folder && library.folders.has(folder)) {
+      targets = library.assets.filter((a) => a.ancestors.some((f) => f.id === folder)).map((a) => a.id);
+    } else {
+      return res.status(400).json({ error: 'Pass ids or a known folder' });
+    }
+    const added = suggester.enqueue(targets, { force: Boolean(force) });
+    res.json({ ...suggester.status(), added });
+  });
+
+  app.post('/api/suggest/cancel', needSuggester, (req, res) => {
+    suggester.cancel();
+    res.json(suggester.status());
+  });
+
+  // Suggest for one asset right away (from the viewer).
+  app.post('/api/suggest/:id/run', needSuggester, async (req, res) => {
+    const asset = library.byId.get(req.params.id);
+    if (!asset) return res.sendStatus(404);
+    try {
+      await suggester.run(asset.id);
+    } catch (err) {
+      // The error is recorded on the asset's suggestions and shown in the viewer.
+    }
+    res.json(library.view(asset));
+  });
+
+  // Accept suggestions as tags: { ids: [...] } accepts everything pending on
+  // those assets; { ids: [id], field, value } accepts one value.
+  app.post('/api/suggest/accept', express.json(), async (req, res, next) => {
+    const { ids, field, value } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids must be a non-empty list' });
+    if (ids.some((id) => !library.has(id))) return res.sendStatus(404);
+    const changes = ids.map((id) => {
+      const pending = library.view(library.byId.get(id)).suggestions?.pending || {};
+      if (field) {
+        const hit = (pending[field] || []).find((v) => v.toLowerCase() === String(value).toLowerCase());
+        return { id, add: hit ? { [field]: [hit] } : {} };
+      }
+      return { id, add: pending };
+    }).filter((c) => Object.keys(c.add).length);
+    try {
+      if (changes.length) await library.tags.applyEach(changes);
+      res.json({ updated: changes.length });
+    } catch (err) {
+      if (err instanceof RangeError) return res.status(400).json({ error: err.message });
+      next(err);
+    }
+  });
+
+  // Dismiss: { id, field, value } drops one value; { ids } drops all pending suggestions.
+  app.post('/api/suggest/dismiss', express.json(), (req, res) => {
+    const { id, ids, field, value } = req.body || {};
+    if (id && field && value != null) {
+      if (!library.has(id)) return res.sendStatus(404);
+      library.suggestions.dismiss(id, field, String(value));
+    } else if (Array.isArray(ids)) {
+      for (const i of ids) if (library.has(i)) library.suggestions.dismissAll(i);
+    } else {
+      return res.status(400).json({ error: 'Pass { id, field, value } or { ids }' });
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/sync', async (req, res, next) => {
@@ -183,11 +262,21 @@ if (require.main === module) {
     refreshMs: (Number(process.env.REFRESH_MINUTES) || 10) * 60 * 1000,
     rights: new RightsStore({ auth, bucket }),
     tags: new TagStore({ auth, bucket }),
+    suggestions: new SuggestionStore({ auth, bucket }),
   });
+  const suggester = new Suggester({
+    library,
+    drive,
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    model: process.env.SUGGEST_MODEL || DEFAULT_MODEL,
+    fields: process.env.SUGGEST_FIELDS ? process.env.SUGGEST_FIELDS.split(/[\s,]+/).filter(Boolean) : undefined,
+    concurrency: Number(process.env.SUGGEST_CONCURRENCY) || 4,
+  });
+  if (!suggester.enabled) console.warn('ANTHROPIC_API_KEY is not set: tag suggestions are off.');
   // Each sync reloads the rights flags and tags too. Saves are conditional on the stored
   // object's generation, so a failed load can't cause an edit to overwrite them.
   library.start();
-  const app = createApp({ library, drive, password: process.env.DAM_PASSWORD });
+  const app = createApp({ library, drive, suggester, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));
 }

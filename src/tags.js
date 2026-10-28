@@ -78,9 +78,14 @@ class TagStore {
     return this.data.tags[id] || {};
   }
 
-  // Adds and removes values on many files/folders at once.
+  // Adds and removes the same values on many files/folders at once.
   // `add` and `remove` are { [fieldKey]: [value, …] }.
-  async apply(ids, { add = {}, remove = {} } = {}) {
+  apply(ids, { add = {}, remove = {} } = {}) {
+    return this.applyEach(ids.map((id) => ({ id, add, remove })));
+  }
+
+  // Applies a different change to each item, as one save: [{ id, add, remove }].
+  async applyEach(changes) {
     const keys = this.fieldKeys();
     const clean = (obj) => {
       const out = {};
@@ -91,8 +96,7 @@ class TagStore {
       }
       return out;
     };
-    add = clean(add);
-    remove = clean(remove);
+    changes = changes.map(({ id, add, remove }) => ({ id, add: clean(add), remove: clean(remove) }));
 
     await this.store.update((data) => {
       // Reuse the existing spelling of a value ("duffel" -> "Duffel") so filters stay tidy.
@@ -100,7 +104,7 @@ class TagStore {
       for (const f of this.fields()) {
         for (const v of f.values) canonical.set(`${f.key}\0${v.toLowerCase()}`, v);
       }
-      for (const id of ids) {
+      for (const { id, add, remove } of changes) {
         const tags = data.tags[id] || {};
         for (const [key, values] of Object.entries(add)) {
           const current = tags[key] || [];

@@ -11,6 +11,8 @@
   --select-bg: #e8effd;
   --danger: #c62828;
   --danger-bg: #fdecea;
+  --ai: #7c3aed;
+  --ai-bg: #f3edff;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -26,6 +28,8 @@
     --select-bg: #1c2540;
     --danger: #ff8a80;
     --danger-bg: #3a1d1d;
+    --ai: #c4a5ff;
+    --ai-bg: #2a2140;
   }
 }
 
@@ -214,3 +218,24 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
   .viewer { flex-direction: column; }
   .details { width: auto; border-left: none; border-top: 1px solid var(--line); max-height: 55%; }
 }
+
+/* Suggestions from Claude */
+.ai-status {
+  margin: 0 16px 12px; padding: 8px 12px; border-radius: 8px;
+  background: var(--ai-bg); color: var(--ai); display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.ai-status .link { color: var(--ai); }
+.caption .ai-line { font-size: 11px; color: var(--ai); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-btn { margin-top: 10px; color: var(--ai); border-color: var(--ai); }
+.suggest { margin-bottom: 14px; padding: 10px; border-radius: 10px; background: var(--ai-bg); }
+.suggest-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--ai); font-weight: 600; font-size: 13px; }
+.suggest .desc { margin: 0 0 8px; font-size: 13px; }
+.suggest .field-row { display: grid; grid-template-columns: 90px 1fr; gap: 8px; padding: 3px 0; }
+.suggest .field-row > span { color: var(--muted); }
+.chip.suggested { background: var(--panel); border: 1px solid var(--ai); padding: 2px 4px 2px 10px; }
+.chip.suggested button.ok { color: var(--ai); }
+.suggest .err { color: var(--danger); font-size: 13px; margin: 0 0 6px; }
+.suggest .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+.suggest .row-actions .btn { padding: 6px 10px; font-size: 13px; }
+.bulk-ai { display: flex; gap: 8px; }
+.bulk-ai .btn { color: var(--ai); border-color: var(--ai); }

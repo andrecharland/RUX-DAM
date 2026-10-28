@@ -6,7 +6,8 @@ const $ = (id) => document.getElementById(id);
 const grid = $('grid');
 const viewer = $('viewer');
 const state = {
-  q: '', kind: '', rights: '', folder: '', tags: new Set(),
+  q: '', kind: '', rights: '', folder: '', tags: new Set(), suggested: '',
+  ai: { enabled: false }, aiWasBusy: false,
   offset: 0, total: 0, loading: false, items: new Map(), facets: {},
   current: null, selected: new Set(), lastPicked: null,
   fields: [], folders: new Map(), expanded: new Set(), facetsOpen: new Set(),
@@ -57,10 +58,44 @@ const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true
 const fieldLabel = (key) => state.fields.find((f) => f.key === key)?.label || key;
 
 function queryParams(extra = {}) {
-  const params = new URLSearchParams({ q: state.q, kind: state.kind, rights: state.rights, folder: state.folder });
+  const params = new URLSearchParams({
+    q: state.q, kind: state.kind, rights: state.rights, folder: state.folder, suggested: state.suggested,
+  });
   for (const t of state.tags) params.append('tag', t);
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
   return params;
+}
+
+// ---------- shareable links ----------
+
+// The page URL mirrors the current view (search, filters, folder, open asset),
+// so copying it shares exactly what's on screen.
+function writeUrl() {
+  const params = new URLSearchParams();
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder']) if (state[key]) params.set(key, state[key]);
+  for (const t of state.tags) params.append('tag', t);
+  if (viewer.open && state.current) params.set('asset', state.current.id);
+  const qs = params.toString();
+  history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
+}
+
+// Reads the view from the URL; returns the asset to open, if any.
+function readUrl() {
+  const params = new URLSearchParams(location.search);
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder']) state[key] = params.get(key) || '';
+  state.tags = new Set(params.getAll('tag'));
+  $('q').value = state.q;
+  $('kind').value = state.kind;
+  $('rights').value = state.rights;
+  $('suggested').value = state.suggested;
+  return params.get('asset');
+}
+
+async function copyText(button, text) {
+  const label = button.textContent;
+  await navigator.clipboard.writeText(text);
+  button.textContent = 'Copied!';
+  setTimeout(() => { button.textContent = label; }, 1500);
 }
 
 // ---------- fields & tag editor ----------
@@ -140,6 +175,7 @@ async function loadFolders() {
   state.folders = new Map(list.map((f) => [f.id, f]));
   if (!state.expanded.size) for (const f of list) if (!f.parentId) state.expanded.add(f.id);
   if (state.folder && !state.folders.has(state.folder)) state.folder = '';
+  for (const a of state.folders.get(state.folder)?.ancestors || []) state.expanded.add(a.id);
   renderTree();
   renderCrumbs();
   renderFolderPanel();
@@ -227,6 +263,10 @@ function renderFolderPanel() {
   $('folder-editor').replaceChildren(tagEditor({
     tags, apply: applyTo([folder.id]), emptyText: 'No tags on this folder yet.',
   }));
+  const suggest = $('folder-suggest');
+  suggest.hidden = !state.ai.enabled;
+  suggest.textContent = `✨ Suggest tags for the ${folder.count.toLocaleString()} assets in this folder`;
+  suggest.onclick = () => queueSuggestions({ folder: folder.id }, folder.count);
 }
 
 // ---------- grid ----------
@@ -255,6 +295,11 @@ function card(asset) {
       el('div', { class: 'name', text: asset.name, title: asset.name }),
       el('div', { class: 'path', text: [asset.collection, asset.path].filter(Boolean).join(' / ') }),
       values.length ? el('div', { class: 'chips-line', text: values.join(' · '), title: values.join(', ') }) : '',
+      asset.suggestions?.count ? el('div', {
+        class: 'ai-line',
+        text: `✨ ${Object.values(asset.suggestions.pending).flat().join(' · ')}`,
+        title: 'Suggested by Claude, not yet accepted',
+      }) : '',
     ]),
   ]);
 }
@@ -271,6 +316,7 @@ async function load(reset = false) {
     state.offset = 0;
     state.items.clear();
     grid.replaceChildren();
+    writeUrl();
   }
   try {
     const data = await api(`/api/assets?${queryParams({ offset: state.offset, limit: PAGE })}`);
@@ -307,6 +353,7 @@ async function afterEdit() {
   if (viewer.open && state.current) {
     const fresh = await api(`/api/assets/${state.current.id}`);
     state.current = fresh;
+    renderSuggestions(fresh);
     renderViewerTags(fresh);
     renderRights(fresh);
   }
@@ -369,6 +416,7 @@ function renderBulk() {
   $('bulk').hidden = !n;
   if (!n) return;
   $('bulk-count').textContent = `${n} selected`;
+  $('bulk-ai').hidden = !state.ai.enabled;
   $('bulk-editor').replaceChildren(tagEditor({ bulk: true, apply: applyTo([...state.selected]) }));
 }
 
@@ -384,6 +432,115 @@ function pick(id, shift) {
   }
   state.lastPicked = id;
   renderBulk();
+}
+
+// ---------- suggestions from Claude ----------
+
+async function refreshAi() {
+  clearTimeout(refreshAi.timer);
+  try {
+    state.ai = await api('/api/suggest/status');
+  } catch {
+    state.ai = { enabled: false };
+  }
+  $('suggested').hidden = !state.ai.enabled && !state.suggested;
+  const busy = state.ai.queued + state.ai.running > 0;
+  const bar = $('ai-status');
+  const cost = state.ai.costUsd != null ? ` · ≈ $${state.ai.costUsd.toFixed(2)} so far` : '';
+  if (busy) {
+    bar.hidden = false;
+    bar.replaceChildren(
+      el('span', { text: `✨ Claude is suggesting tags: ${state.ai.done} done, ${state.ai.queued + state.ai.running} to go${state.ai.failed ? `, ${state.ai.failed} failed` : ''}${cost}` }),
+      el('button', { type: 'button', class: 'link', text: 'Stop', onclick: async () => { await api('/api/suggest/cancel', {}); refreshAi(); } }),
+    );
+    // Show new results as they come in.
+    if (++refreshAi.ticks % 4 === 0) reloadInPlace();
+    refreshAi.timer = setTimeout(refreshAi, 3000);
+  } else if (state.aiWasBusy) {
+    bar.hidden = false;
+    bar.replaceChildren(
+      el('span', { text: `✨ Done: ${state.ai.done} suggested${state.ai.failed ? `, ${state.ai.failed} failed (${state.ai.lastError})` : ''}${cost}.` }),
+      el('button', { type: 'button', class: 'link', text: 'Review suggestions', onclick: () => {
+        state.suggested = 'pending';
+        $('suggested').value = 'pending';
+        $('suggested').hidden = false;
+        load(true);
+      } }),
+      el('button', { type: 'button', class: 'link', text: 'Hide', onclick: () => { bar.hidden = true; } }),
+    );
+    reloadInPlace();
+  }
+  state.aiWasBusy = busy;
+  renderFolderPanel();
+  renderBulk();
+}
+refreshAi.ticks = 0;
+
+async function queueSuggestions(body, count) {
+  const each = state.ai.estimatePerImage;
+  const estimate = each ? ` It costs roughly $${(each * count).toFixed(2)} (about $${each.toFixed(3)} per image).` : '';
+  if (!confirm(`Ask Claude to suggest tags for up to ${count.toLocaleString()} assets?${estimate}\n\nAssets that already have suggestions are skipped. You review everything before it becomes a tag.`)) return;
+  try {
+    const res = await api('/api/suggest', body);
+    if (!res.added) alert('Nothing to do: these assets already have suggestions (or have no preview).');
+    state.aiWasBusy = state.aiWasBusy || res.added > 0;
+  } catch (err) {
+    alert(err.message);
+  }
+  refreshAi();
+}
+
+const accept = async (body) => { await api('/api/suggest/accept', body); await afterEdit(); };
+const dismiss = async (body) => { await api('/api/suggest/dismiss', body); await afterEdit(); };
+
+function renderSuggestions(asset) {
+  const box = $('d-suggest');
+  const s = asset.suggestions;
+  if (!s && !state.ai.enabled) return box.replaceChildren();
+
+  const run = async (button) => {
+    button.disabled = true;
+    button.textContent = 'Asking Claude…';
+    try {
+      const fresh = await api(`/api/suggest/${asset.id}/run`, {});
+      state.current = fresh;
+      state.items.set(fresh.id, fresh);
+      grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
+      renderSuggestions(fresh);
+      refreshAi();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = err.message;
+    }
+  };
+  const runButton = (label) => el('button', { class: 'btn ghost', type: 'button', text: label, onclick: (e) => run(e.target) });
+
+  const parts = [el('div', { class: 'suggest-head' }, [el('span', { text: '✨ Suggested by Claude' })])];
+  if (!s) {
+    parts.push(el('div', { class: 'row-actions' }, [runButton('Suggest tags')]));
+  } else if (s.error) {
+    parts.push(el('p', { class: 'err', text: s.error }));
+    if (state.ai.enabled) parts.push(el('div', { class: 'row-actions' }, [runButton('Try again')]));
+  } else {
+    if (s.description) parts.push(el('p', { class: 'desc', text: s.description }));
+    const rows = state.fields.filter((f) => s.pending[f.key]?.length).map((f) => el('div', { class: 'field-row' }, [
+      el('span', { text: f.label }),
+      el('div', { class: 'chips' }, s.pending[f.key].map((value) => el('span', { class: 'chip suggested' }, [
+        value,
+        el('button', { type: 'button', class: 'ok', title: 'Accept', 'aria-label': `Accept ${value}`, text: '✓',
+          onclick: () => accept({ ids: [asset.id], field: f.key, value }) }),
+        el('button', { type: 'button', title: 'Dismiss', 'aria-label': `Dismiss ${value}`, text: '×',
+          onclick: () => dismiss({ id: asset.id, field: f.key, value }) }),
+      ]))),
+    ]));
+    parts.push(...(rows.length ? rows : [el('p', { class: 'empty-note', text: 'All suggestions reviewed.' })]));
+    parts.push(el('div', { class: 'row-actions' }, [
+      s.count ? el('button', { class: 'btn', type: 'button', text: 'Accept all', onclick: () => accept({ ids: [asset.id] }) }) : '',
+      s.count ? el('button', { class: 'btn ghost', type: 'button', text: 'Dismiss all', onclick: () => dismiss({ ids: [asset.id] }) }) : '',
+      state.ai.enabled ? runButton('Ask again') : '',
+    ]));
+  }
+  box.replaceChildren(el('div', { class: 'suggest' }, parts));
 }
 
 // ---------- viewer ----------
@@ -463,14 +620,12 @@ function open(asset) {
   $('d-meta').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
   $('d-download').href = `${fileUrl}?download=1`;
   $('d-drive').href = asset.webViewLink;
-  $('d-copy').onclick = async () => {
-    await navigator.clipboard.writeText(new URL(fileUrl, location.href).href);
-    $('d-copy').textContent = 'Copied!';
-    setTimeout(() => { $('d-copy').textContent = 'Copy link'; }, 1500);
-  };
+  $('d-copy').onclick = () => copyText($('d-copy'), location.href);
+  renderSuggestions(asset);
   renderViewerTags(asset);
   renderRights(asset);
   viewer.showModal();
+  writeUrl();
 }
 
 // ---------- events ----------
@@ -507,7 +662,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 $('close').addEventListener('click', () => viewer.close());
-viewer.addEventListener('close', () => $('stage').replaceChildren());
+viewer.addEventListener('close', () => {
+  $('stage').replaceChildren();
+  writeUrl();
+});
 $('d-download').addEventListener('click', (e) => {
   const r = state.current?.rights;
   if (r?.status === 'restricted' &&
@@ -528,6 +686,10 @@ $('q').addEventListener('input', (e) => {
 });
 $('kind').addEventListener('change', (e) => { state.kind = e.target.value; load(true); });
 $('rights').addEventListener('change', (e) => { state.rights = e.target.value; load(true); });
+$('suggested').addEventListener('change', (e) => { state.suggested = e.target.value; load(true); });
+$('copy-view').addEventListener('click', (e) => copyText(e.target, location.href));
+$('bulk-suggest').addEventListener('click', () => queueSuggestions({ ids: [...state.selected] }, state.selected.size));
+$('bulk-accept').addEventListener('click', () => accept({ ids: [...state.selected] }));
 $('clear-filters').addEventListener('click', () => { state.tags.clear(); load(true); });
 $('add-field').addEventListener('click', async () => {
   const label = prompt('Name of the new field (for example: Campaign, Photographer, Shoot):');
@@ -569,6 +731,14 @@ new IntersectionObserver((entries) => {
 }, { rootMargin: '600px' }).observe($('sentinel'));
 
 (async () => {
-  await Promise.all([loadFields(), loadFolders()]);
+  const assetId = readUrl();
+  await Promise.all([loadFields(), loadFolders(), refreshAi()]);
   await load(true);
+  if (assetId) {
+    try {
+      open(await api(`/api/assets/${encodeURIComponent(assetId)}`));
+    } catch {
+      // The asset is gone or the link is stale: just show the grid.
+    }
+  }
 })();

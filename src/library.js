@@ -2,6 +2,7 @@
 
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
+const { SuggestionStore } = require('./suggest');
 
 // Parses `field:value` filter strings into a Map of field -> Set(lowercased values).
 function parseTagFilters(list = []) {
@@ -23,6 +24,7 @@ class Library {
     refreshMs = 10 * 60 * 1000,
     rights = new RightsStore(),
     tags = new TagStore(),
+    suggestions = new SuggestionStore(),
     log = console,
   } = {}) {
     this.drive = drive;
@@ -30,6 +32,7 @@ class Library {
     this.refreshMs = refreshMs;
     this.rights = rights;
     this.tags = tags;
+    this.suggestions = suggestions;
     this.log = log;
     this.assets = [];
     this.byId = new Map();
@@ -52,7 +55,7 @@ class Library {
       const assets = [];
       const folders = new Map();
       const errors = [];
-      for (const [name, store] of [['rights', this.rights], ['tags', this.tags]]) {
+      for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions]]) {
         try {
           await store.load();
         } catch (err) {
@@ -87,13 +90,16 @@ class Library {
     return this.byId.has(id);
   }
 
-  // Asset as returned by the API: index data plus its effective rights and metadata.
+  // Asset as returned by the API: index data plus its effective rights,
+  // metadata, and any of Claude's suggestions not yet accepted or dismissed.
   view(asset) {
+    const tags = this.tags.resolve(asset);
     return {
       ...asset,
       rights: this.rights.resolve(asset),
-      tags: this.tags.resolve(asset),
+      tags,
       ownTags: this.tags.own(asset.id),
+      suggestions: this.suggestions.resolve(asset.id, tags),
     };
   }
 
@@ -115,11 +121,12 @@ class Library {
     }));
   }
 
-  // Filters: free text (name, folder path, metadata values), type, folder
+  // Filters: free text (name, folder path, metadata values, Claude's description), type, folder
   // (including subfolders), rights status, and metadata values (`field:value`;
-  // values in one field are OR-ed, different fields are AND-ed). Also returns
+  // values in one field are OR-ed, different fields are AND-ed), and whether
+  // there are suggestions to review (`suggested: 'pending'`). Also returns
   // value counts per field across the matches, for the filter sidebar.
-  search({ q = '', kind = '', folder = '', rights = '', tags = [], offset = 0, limit = 100 } = {}) {
+  search({ q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', offset = 0, limit = 100 } = {}) {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const tagFilters = parseTagFilters(tags);
     const matches = [];
@@ -129,6 +136,7 @@ class Library {
       if (folder && !a.ancestors.some((f) => f.id === folder)) continue;
       const view = this.view(a);
       if (rights && view.rights.status !== rights) continue;
+      if (suggested === 'pending' && !view.suggestions?.count) continue;
       let ok = true;
       for (const [key, wanted] of tagFilters) {
         if (!(view.tags[key] || []).some((t) => wanted.has(t.value.toLowerCase()))) { ok = false; break; }
@@ -136,7 +144,8 @@ class Library {
       if (!ok) continue;
       if (terms.length) {
         const values = Object.values(view.tags).flat().map((t) => t.value).join(' ');
-        const haystack = `${a.name} ${a.collection} ${a.path} ${values}`.toLowerCase();
+        const description = view.suggestions?.description || '';
+        const haystack = `${a.name} ${a.collection} ${a.path} ${values} ${description}`.toLowerCase();
         if (!terms.every((t) => haystack.includes(t))) continue;
       }
       matches.push(view);

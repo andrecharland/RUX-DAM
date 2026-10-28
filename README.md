@@ -11,6 +11,8 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 - Metadata fields (Product, Activity, Color, Vehicle, Season, Event, Location, People,
   Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
 - Search by file name, folder path or metadata; filter by type (image or video)
+- Tag suggestions from Claude (product, activity, color, vehicle, season, keywords) that you accept or dismiss
+- Shareable links: the URL always reflects the current folder, filters, search and open asset
 - Preview images and stream videos (with seeking) in the browser
 - Download originals, open in Drive, copy a direct link
 - Usage-rights flags: mark a file or a whole folder **Do not use** (with a note), filter by rights
@@ -46,6 +48,10 @@ The server only serves files that are in the index.
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
 | `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`) and usage-rights flags (`rights.json`). Without it, both are lost on restart. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
+| `ANTHROPIC_API_KEY` | no | Claude API key. Turns on tag suggestions |
+| `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-opus-5-5` |
+| `SUGGEST_FIELDS` | no | Fields Claude fills in, default `product,activity,color,vehicle,season,tags` |
+| `SUGGEST_CONCURRENCY` | no | Images sent to Claude in parallel, default `4` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | no | Path to a key file (local dev) |
 | `PORT` | no | Default `8080` |
@@ -100,6 +106,50 @@ with **+ Add a field** in the sidebar.
 Values are case-insensitive and reuse the first spelling entered, so "duffel" becomes
 "Duffel" if that already exists. Metadata is keyed by Drive ID, so it survives renames
 and moves inside the indexed folders.
+
+## Tag suggestions from Claude
+
+With `ANTHROPIC_API_KEY` set, Claude looks at each asset's preview (a 1024px Drive
+thumbnail; for videos, the poster frame) along with its file name and folder path, and
+suggests values for Product, Activity, Color, Vehicle, Season and Tags, plus a one-line
+description that search also matches. It reuses values already in use, so the more you
+tag, the more consistent its suggestions become. Nothing becomes a tag until you accept it.
+
+- **One asset**: open it and click **Suggest tags**.
+- **A folder**: select it and click **✨ Suggest tags for the N assets in this folder**.
+- **A selection**: select assets and click **✨ Suggest tags** in the bottom bar.
+
+Runs happen in the background; a bar shows progress and the running cost, and **Stop**
+cancels what's left. Assets that already have suggestions are skipped. Then choose
+**✨ Suggestions to review** in the header: suggested values show in purple on each card.
+In the viewer, ✓ accepts a value, × dismisses it, or use **Accept all**. To accept everything
+for many assets at once, select them and click **Accept suggestions**.
+
+Suggestions are stored as `suggestions.json` in the data bucket.
+
+**Cost**: about $0.02 per image with the default model (≈2,000 input and ≈600 output
+tokens), so ~$100 per 5,000 images. `SUGGEST_MODEL=claude-sonnet-5-5` roughly halves that and
+`claude-haiku-5-5` is far cheaper, with less accurate results; try a folder first and compare.
+
+**Setup** (keep the key in Secret Manager rather than a plain environment variable):
+
+```sh
+printf '%s' 'sk-ant-...' | gcloud secrets create anthropic-api-key --data-file=-
+gcloud secrets add-iam-policy-binding anthropic-api-key \
+  --member=serviceAccount:rux-dam@<project-id>.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+gcloud run services update rux-dam --region <region> --update-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest
+```
+
+Background runs need CPU allocated outside requests (`--no-cpu-throttling`), and a run in
+progress is lost if the service restarts; finished suggestions are kept, so just start it again.
+
+## Shareable links
+
+The address bar always reflects what's on screen: folder, search, type, rights, metadata
+filters and the open asset. **Copy link to this view** (above the grid) and **Copy link to
+this asset** (in the viewer) copy it, e.g.
+`…/?tag=product:Duffel&tag=season:Winter&rights=cleared` opens straight to cleared Duffel
+photos tagged Winter. People opening the link need the app's password, if one is set.
 
 ## Usage rights
 

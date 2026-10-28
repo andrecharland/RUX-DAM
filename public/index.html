@@ -21,6 +21,10 @@
       <option value="cleared">Cleared to use</option>
       <option value="restricted">Do not use</option>
     </select>
+    <select id="suggested" aria-label="Suggestions" hidden>
+      <option value="">All assets</option>
+      <option value="pending">✨ Suggestions to review</option>
+    </select>
     <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
   </header>
 
@@ -45,11 +49,14 @@
       <section id="folder-tags" class="folder-tags" hidden>
         <p class="hint">Tags on this folder apply to all <strong id="folder-count"></strong> assets inside it.</p>
         <div id="folder-editor"></div>
+        <button id="folder-suggest" class="btn ghost ai-btn" type="button" hidden></button>
       </section>
       <div class="toolbar">
         <p id="meta" class="meta"></p>
         <button id="select-all" class="link" type="button">Select all loaded</button>
+        <button id="copy-view" class="link" type="button">Copy link to this view</button>
       </div>
+      <div id="ai-status" class="ai-status" hidden></div>
       <div id="grid" class="grid"></div>
       <div id="sentinel"></div>
     </main>
@@ -58,6 +65,10 @@
   <div id="bulk" class="bulk" hidden>
     <strong id="bulk-count"></strong>
     <div id="bulk-editor" class="bulk-editor"></div>
+    <div class="bulk-ai" id="bulk-ai" hidden>
+      <button id="bulk-suggest" class="btn ghost" type="button">✨ Suggest tags</button>
+      <button id="bulk-accept" class="btn ghost" type="button">Accept suggestions</button>
+    </div>
     <button id="bulk-clear" class="btn ghost" type="button">Clear selection</button>
   </div>
 
@@ -71,11 +82,12 @@
         <div class="actions">
           <a id="d-download" class="btn">Download</a>
           <a id="d-drive" class="btn ghost" target="_blank" rel="noopener">Open in Drive</a>
-          <button id="d-copy" class="btn ghost" type="button">Copy link</button>
+          <button id="d-copy" class="btn ghost" type="button">Copy link to this asset</button>
         </div>
 
         <section class="panel">
           <h3>Metadata</h3>
+          <div id="d-suggest"></div>
           <div id="d-tags"></div>
         </section>
 
