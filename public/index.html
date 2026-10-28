@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RUX Assets</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>RUX <span>Assets</span></h1>
+    <input id="q" type="search" placeholder="Search by name or folder…" autocomplete="off">
+    <select id="kind" aria-label="Type">
+      <option value="">All types</option>
+      <option value="image">Images</option>
+      <option value="video">Videos</option>
+    </select>
+    <select id="collection" aria-label="Collection">
+      <option value="">All folders</option>
+    </select>
+    <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
+  </header>
+
+  <p id="meta" class="meta"></p>
+  <main id="grid" class="grid"></main>
+  <div id="sentinel"></div>
+
+  <dialog id="viewer">
+    <div class="viewer">
+      <div id="stage" class="stage"></div>
+      <aside class="details">
+        <button id="close" class="close" type="button" aria-label="Close">×</button>
+        <h2 id="d-name"></h2>
+        <dl id="d-meta"></dl>
+        <div class="actions">
+          <a id="d-download" class="btn">Download</a>
+          <a id="d-drive" class="btn ghost" target="_blank" rel="noopener">Open in Drive</a>
+          <button id="d-copy" class="btn ghost" type="button">Copy link</button>
+        </div>
+      </aside>
+    </div>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>
