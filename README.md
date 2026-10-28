@@ -7,7 +7,10 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 
 **Features**
 - Grid of all images and videos with thumbnails, infinite scroll
-- Search by file name or folder path; filter by type (image or video) and by top-level folder
+- Browse by the Google Drive folder tree, with asset counts per folder
+- Metadata fields (Product, Activity, Color, Vehicle, Season, Event, Location, People,
+  Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
+- Search by file name, folder path or metadata; filter by type (image or video)
 - Preview images and stream videos (with seeking) in the browser
 - Download originals, open in Drive, copy a direct link
 - Usage-rights flags: mark a file or a whole folder **Do not use** (with a note), filter by rights
@@ -41,7 +44,7 @@ The server only serves files that are in the index.
 | `DRIVE_FOLDER_IDS` | yes | Folder IDs or full folder URLs, separated by spaces or commas (use spaces with `gcloud --set-env-vars`, which splits on commas) |
 | `DAM_PASSWORD` | no | Shared password (browser login prompt, any username) |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
-| `RIGHTS_BUCKET` | no | Cloud Storage bucket for usage-rights flags. Without it, flags are lost on restart |
+| `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`) and usage-rights flags (`rights.json`). Without it, both are lost on restart. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | no | Path to a key file (local dev) |
@@ -76,6 +79,28 @@ Identity-Aware Proxy and drop `DAM_PASSWORD`.
 The included `Dockerfile` also runs on any container host (Fly.io, Render, Railway).
 There, pass the key through `GOOGLE_SERVICE_ACCOUNT_JSON`.
 
+## Folders and metadata
+
+The sidebar shows the Drive folder tree; selecting a folder shows everything inside it,
+including subfolders.
+
+Each asset can carry several values in each metadata field. The default fields are
+Product, Activity, Color, Vehicle, Season, Event, Location, People and Tags; add more
+with **+ Add a field** in the sidebar.
+
+- **Tag a folder**: select it in the tree and add values in the panel above the grid.
+  Folder values apply to everything inside it (shown as dashed chips on the assets).
+  Folders with tags have a dot in the tree.
+- **Tag one asset**: open it and use the **Metadata** section.
+- **Tag many at once**: tick the checkbox on a card (shift-click to select a range, or
+  **Select all loaded**), then use the bar at the bottom to add or remove a value.
+- **Filter**: the sidebar lists the values in use with counts. Values within a field are
+  combined with OR, different fields with AND. Search also matches metadata values.
+
+Values are case-insensitive and reuse the first spelling entered, so "duffel" becomes
+"Duffel" if that already exists. Metadata is keyed by Drive ID, so it survives renames
+and moves inside the indexed folders.
+
 ## Usage rights
 
 Every asset is **Cleared** by default. In the viewer, choose **Do not use** (optionally
@@ -88,13 +113,13 @@ Restricted assets show a red **Do not use** badge, can be filtered with the righ
 selector, and ask for confirmation before downloading.
 
 Flags are keyed by Drive ID, so they survive renames and moves inside the indexed folders.
-They are stored as `rights.json` in a Cloud Storage bucket:
+They are stored as `rights.json` in the Cloud Storage bucket, next to `tags.json`:
 
 ```sh
 gcloud storage buckets create gs://<project-id>-rux-dam-rights --location=<region> --uniform-bucket-level-access
 gcloud storage buckets add-iam-policy-binding gs://<project-id>-rux-dam-rights \
   --member=serviceAccount:rux-dam@<project-id>.iam.gserviceaccount.com --role=roles/storage.objectUser
-gcloud run services update rux-dam --region <region> --update-env-vars RIGHTS_BUCKET=<project-id>-rux-dam-rights
+gcloud run services update rux-dam --region <region> --update-env-vars DATA_BUCKET=<project-id>-rux-dam-rights
 ```
 
 Turn on object versioning on the bucket (`gcloud storage buckets update gs://… --versioning`)

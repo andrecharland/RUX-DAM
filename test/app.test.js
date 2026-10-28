@@ -6,6 +6,7 @@ const { createApp, parseFolderIds } = require('../src/server');
 const { Library } = require('../src/library');
 const { DriveClient, toAsset } = require('../src/drive');
 const { RightsStore } = require('../src/rights');
+const { TagStore } = require('../src/tags');
 
 const files = [
   { id: 'img1', name: 'Hero Shot.jpg', mimeType: 'image/jpeg', size: '2048', modifiedTime: '2026-01-02T00:00:00Z', thumbnailLink: 'x', imageMediaMetadata: { width: 100, height: 50 } },
@@ -38,7 +39,8 @@ const fakeDrive = {
 
 async function withServer(opts, fn) {
   const rights = new RightsStore({ log: quiet });
-  const library = new Library(fakeDrive, ['root'], { rights, log: quiet });
+  const tags = new TagStore({ log: quiet });
+  const library = new Library(fakeDrive, ['root'], { rights, tags, log: quiet });
   await library.sync();
   const server = createApp({ library, drive: fakeDrive, ...opts }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -72,8 +74,15 @@ test('lists, searches and filters assets', async () => {
     assert.deepStrictEqual(videos.items.map((a) => a.id), ['vid1']);
     assert.strictEqual(videos.items[0].durationMs, 61000);
 
-    const cols = await (await fetch(`${base}/api/collections`)).json();
-    assert.deepStrictEqual(cols, [{ name: 'Brand', count: 2 }]);
+    const folders = await (await fetch(`${base}/api/folders`)).json();
+    assert.deepStrictEqual(
+      folders.map(({ id, parentId, count }) => ({ id, parentId, count })),
+      [{ id: 'root', parentId: null, count: 2 }, { id: 'fPhotos', parentId: 'root', count: 1 },
+        { id: 'fVideos', parentId: 'root', count: 1 }],
+    );
+
+    const inPhotos = await (await fetch(`${base}/api/assets?folder=fPhotos`)).json();
+    assert.deepStrictEqual(inPhotos.items.map((a) => a.id), ['img1']);
   });
 });
 
@@ -164,4 +173,51 @@ test('crawl walks nested folders in parallel and records ancestors', async () =>
   assert.strictEqual(w.path, 'A/A1');
   assert.deepStrictEqual(w.ancestors.map((f) => f.id), ['root', 'a', 'a1']);
   assert.strictEqual(peak, 2, 'listed folders concurrently, capped at the limit');
+});
+
+test('metadata: folder tags inherit, file tags add, filters and facets', async () => {
+  await withServer({}, async (base) => {
+    const get = async (id) => (await fetch(`${base}/api/assets/${id}`)).json();
+    const search = async (qs) => (await fetch(`${base}/api/assets?${qs}`)).json();
+
+    const fields = await (await fetch(`${base}/api/fields`)).json();
+    assert.deepStrictEqual(fields.map((f) => f.key).slice(0, 6), ['product', 'activity', 'color', 'vehicle', 'season', 'event']);
+    assert.ok(fields.find((f) => f.key === 'season').values.includes('Winter'), 'season suggestions');
+
+    // Tag a folder, then a file, then several files at once.
+    assert.strictEqual((await post(`${base}/api/tags`, { ids: ['root'], add: { event: ['Sea Otter 2026'] } })).status, 200);
+    await post(`${base}/api/tags`, { ids: ['img1'], add: { product: ['Duffel'], color: ['Black'] } });
+    await post(`${base}/api/tags`, { ids: ['img1', 'vid1'], add: { activity: ['Mountain Biking'], product: ['duffel'] } });
+
+    const img = await get('img1');
+    assert.deepStrictEqual(img.tags.event, [{ value: 'Sea Otter 2026', from: { scope: 'folder', id: 'root', name: 'Brand' } }]);
+    assert.deepStrictEqual(img.ownTags.product, ['Duffel']);
+    const vid = await get('vid1');
+    assert.deepStrictEqual(vid.ownTags.product, ['Duffel'], 'reuses the existing spelling');
+
+    const all = await search('');
+    assert.deepStrictEqual(all.facets.product, { Duffel: 2 });
+    assert.deepStrictEqual(all.facets.event, { 'Sea Otter 2026': 2 });
+
+    assert.deepStrictEqual((await search('tag=color:black')).items.map((a) => a.id), ['img1']);
+    assert.strictEqual((await search('tag=color:Black&tag=color:Red')).total, 1, 'OR within a field');
+    assert.strictEqual((await search('tag=color:Black&tag=product:Duffel')).total, 1, 'AND across fields');
+    assert.strictEqual((await search('q=sea%20otter')).total, 2, 'search matches inherited tags');
+
+    await post(`${base}/api/tags`, { ids: ['img1'], remove: { color: ['BLACK'] } });
+    assert.strictEqual((await get('img1')).ownTags.color, undefined);
+
+    // Custom fields.
+    assert.strictEqual((await post(`${base}/api/fields`, { label: 'Photographer' })).status, 200);
+    assert.strictEqual((await post(`${base}/api/fields`, { label: 'photographer' })).status, 400);
+    await post(`${base}/api/tags`, { ids: ['vid1'], add: { photographer: ['Rhys Verner'] } });
+    assert.deepStrictEqual((await get('vid1')).ownTags.photographer, ['Rhys Verner']);
+
+    assert.strictEqual((await post(`${base}/api/tags`, { ids: ['img1'], add: { nope: ['x'] } })).status, 400);
+    assert.strictEqual((await post(`${base}/api/tags`, { ids: ['ghost'], add: { color: ['x'] } })).status, 404);
+    assert.strictEqual((await post(`${base}/api/tags`, { ids: [] })).status, 400);
+
+    const folders = await (await fetch(`${base}/api/folders`)).json();
+    assert.deepStrictEqual(folders.find((f) => f.id === 'root').tags, { event: ['Sea Otter 2026'] });
+  });
 });

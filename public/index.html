@@ -8,15 +8,13 @@
 </head>
 <body>
   <header class="bar">
+    <button id="toggle-side" class="icon-btn" type="button" aria-label="Folders and filters">☰</button>
     <h1>RUX <span>Assets</span></h1>
-    <input id="q" type="search" placeholder="Search by name or folder…" autocomplete="off">
+    <input id="q" type="search" placeholder="Search names, folders, tags…" autocomplete="off">
     <select id="kind" aria-label="Type">
       <option value="">All types</option>
       <option value="image">Images</option>
       <option value="video">Videos</option>
-    </select>
-    <select id="collection" aria-label="Collection">
-      <option value="">All folders</option>
     </select>
     <select id="rights" aria-label="Usage rights">
       <option value="">Any rights</option>
@@ -26,9 +24,42 @@
     <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
   </header>
 
-  <p id="meta" class="meta"></p>
-  <main id="grid" class="grid"></main>
-  <div id="sentinel"></div>
+  <div class="layout">
+    <aside id="side" class="side">
+      <section>
+        <h2>Folders</h2>
+        <ul id="tree" class="tree"></ul>
+      </section>
+      <section>
+        <div class="side-head">
+          <h2>Filters</h2>
+          <button id="clear-filters" class="link" type="button" hidden>Clear</button>
+        </div>
+        <div id="facets"></div>
+        <button id="add-field" class="link" type="button">+ Add a field</button>
+      </section>
+    </aside>
+
+    <main class="main">
+      <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
+      <section id="folder-tags" class="folder-tags" hidden>
+        <p class="hint">Tags on this folder apply to all <strong id="folder-count"></strong> assets inside it.</p>
+        <div id="folder-editor"></div>
+      </section>
+      <div class="toolbar">
+        <p id="meta" class="meta"></p>
+        <button id="select-all" class="link" type="button">Select all loaded</button>
+      </div>
+      <div id="grid" class="grid"></div>
+      <div id="sentinel"></div>
+    </main>
+  </div>
+
+  <div id="bulk" class="bulk" hidden>
+    <strong id="bulk-count"></strong>
+    <div id="bulk-editor" class="bulk-editor"></div>
+    <button id="bulk-clear" class="btn ghost" type="button">Clear selection</button>
+  </div>
 
   <dialog id="viewer">
     <div class="viewer">
@@ -37,7 +68,18 @@
         <button id="close" class="close" type="button" aria-label="Close">×</button>
         <h2 id="d-name"></h2>
         <dl id="d-meta"></dl>
-        <section class="rights">
+        <div class="actions">
+          <a id="d-download" class="btn">Download</a>
+          <a id="d-drive" class="btn ghost" target="_blank" rel="noopener">Open in Drive</a>
+          <button id="d-copy" class="btn ghost" type="button">Copy link</button>
+        </div>
+
+        <section class="panel">
+          <h3>Metadata</h3>
+          <div id="d-tags"></div>
+        </section>
+
+        <section class="panel rights">
           <h3>Usage rights</h3>
           <p id="r-current" class="r-current"></p>
           <div class="r-choice" role="radiogroup" aria-label="Usage rights">
@@ -56,11 +98,6 @@
           </div>
           <p id="r-msg" class="r-msg" role="status"></p>
         </section>
-        <div class="actions">
-          <a id="d-download" class="btn">Download</a>
-          <a id="d-drive" class="btn ghost" target="_blank" rel="noopener">Open in Drive</a>
-          <button id="d-copy" class="btn ghost" type="button">Copy link</button>
-        </div>
       </aside>
     </div>
   </dialog>

@@ -8,6 +8,7 @@ const { createAuth } = require('./google');
 const { DriveClient } = require('./drive');
 const { Library } = require('./library');
 const { RightsStore } = require('./rights');
+const { TagStore } = require('./tags');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -61,8 +62,9 @@ function createApp({ library, drive, password }) {
     res.json(library.search({
       q: String(req.query.q || ''),
       kind: String(req.query.kind || ''),
-      collection: String(req.query.collection || ''),
+      folder: String(req.query.folder || ''),
       rights: String(req.query.rights || ''),
+      tags: [].concat(req.query.tag || []).map(String),
       offset,
       limit,
     }));
@@ -74,7 +76,34 @@ function createApp({ library, drive, password }) {
     res.json(library.view(asset));
   });
 
-  app.get('/api/collections', (req, res) => res.json(library.collections()));
+  app.get('/api/folders', (req, res) => res.json(library.folderList()));
+  app.get('/api/fields', (req, res) => res.json(library.tags.fields()));
+
+  app.post('/api/fields', express.json(), async (req, res, next) => {
+    try {
+      res.json(await library.tags.addField(req.body?.label));
+    } catch (err) {
+      if (err instanceof RangeError) return res.status(400).json({ error: err.message });
+      next(err);
+    }
+  });
+
+  // Add/remove metadata on indexed files and folders:
+  // { ids: [...], add: { field: [values] }, remove: { field: [values] } }
+  app.post('/api/tags', express.json(), async (req, res, next) => {
+    const { ids, add, remove } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length || ids.length > 5000) {
+      return res.status(400).json({ error: 'ids must be a non-empty list' });
+    }
+    if (ids.some((id) => !library.has(id) && !library.folders.has(id))) return res.sendStatus(404);
+    try {
+      await library.tags.apply(ids, { add, remove });
+      res.json({ updated: ids.length });
+    } catch (err) {
+      if (err instanceof RangeError) return res.status(400).json({ error: err.message });
+      next(err);
+    }
+  });
   app.get('/api/status', (req, res) => res.json(library.status()));
 
   // Set usage rights on an indexed file or folder. status: cleared | restricted | inherit
@@ -149,12 +178,13 @@ if (require.main === module) {
   }
   const auth = createAuth();
   const drive = new DriveClient(auth, { concurrency: Number(process.env.SYNC_CONCURRENCY) || 8 });
-  const rights = new RightsStore({ auth, bucket: process.env.RIGHTS_BUCKET });
+  const bucket = process.env.DATA_BUCKET || process.env.RIGHTS_BUCKET;
   const library = new Library(drive, folderIds, {
     refreshMs: (Number(process.env.REFRESH_MINUTES) || 10) * 60 * 1000,
-    rights,
+    rights: new RightsStore({ auth, bucket }),
+    tags: new TagStore({ auth, bucket }),
   });
-  // Each sync reloads the rights flags too. Saves are conditional on the stored
+  // Each sync reloads the rights flags and tags too. Saves are conditional on the stored
   // object's generation, so a failed load can't cause an edit to overwrite them.
   library.start();
   const app = createApp({ library, drive, password: process.env.DAM_PASSWORD });
