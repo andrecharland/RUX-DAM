@@ -37,7 +37,7 @@ The server only serves files that are in the index.
 
 | Variable | Required | Description |
 |---|---|---|
-| `DRIVE_FOLDER_IDS` | yes | Comma-separated folder IDs or full folder URLs |
+| `DRIVE_FOLDER_IDS` | yes | Folder IDs or full folder URLs, separated by spaces or commas (use spaces with `gcloud --set-env-vars`, which splits on commas) |
 | `DAM_PASSWORD` | no | Shared password (browser login prompt, any username) |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
@@ -60,7 +60,7 @@ gcloud run deploy rux-dam \
   --source . \
   --region us-central1 \
   --service-account rux-dam@<project>.iam.gserviceaccount.com \
-  --set-env-vars DRIVE_FOLDER_IDS="<id1>,<id2>",DAM_PASSWORD="<password>" \
+  --set-env-vars DRIVE_FOLDER_IDS="<id1> <id2>",DAM_PASSWORD="<password>" \
   --allow-unauthenticated \
   --min-instances 1
 ```
