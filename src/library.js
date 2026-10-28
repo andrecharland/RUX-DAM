@@ -3,6 +3,11 @@
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { SuggestionStore } = require('./suggest');
+const crypto = require('node:crypto');
+
+function hashIndex(assets, folders) {
+  return crypto.createHash('sha1').update(JSON.stringify([assets, folders])).digest('hex');
+}
 
 // Parses `field:value` filter strings into a Map of field -> Set(lowercased values).
 function parseTagFilters(list = []) {
@@ -19,12 +24,18 @@ function parseTagFilters(list = []) {
 
 // In-memory index of every asset across the configured Drive folders,
 // refreshed on an interval. Fine for tens of thousands of assets.
+//
+// With an `index` store (a JsonStore in the data bucket), each sync saves the
+// asset list, and a restart shows that saved list right away while a fresh
+// sync runs in the background. Metadata (tags, rights, suggestions) is kept
+// separately, keyed by Drive file ID, and a sync never changes it.
 class Library {
   constructor(drive, folderIds, {
     refreshMs = 10 * 60 * 1000,
     rights = new RightsStore(),
     tags = new TagStore(),
     suggestions = new SuggestionStore(),
+    index = null,
     log = console,
   } = {}) {
     this.drive = drive;
@@ -33,19 +44,78 @@ class Library {
     this.rights = rights;
     this.tags = tags;
     this.suggestions = suggestions;
+    this.index = index;
     this.log = log;
     this.assets = [];
     this.byId = new Map();
     this.folders = new Map();
     this.lastSync = null;
+    this.restoredFrom = null;
     this.syncing = null;
     this.errors = [];
+    this.savedIndexHash = null;
   }
 
   start() {
-    this.sync();
+    this.ready = (async () => {
+      await this.loadStores([]);
+      await this.restore();
+    })();
+    this.ready.then(() => this.sync());
     this.timer = setInterval(() => this.sync(), this.refreshMs);
     this.timer.unref();
+    return this.ready;
+  }
+
+  async loadStores(errors) {
+    for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions]]) {
+      try {
+        await store.load();
+      } catch (err) {
+        errors.push({ store: name, message: err.message });
+        this.log.error(`Failed to load ${name}: ${err.message}`);
+      }
+    }
+  }
+
+  // Sorted deterministically (crawls run in parallel), so an unchanged Drive
+  // produces an identical index and isn't saved again.
+  setIndex(assets, folders) {
+    assets.sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || '') || a.id.localeCompare(b.id));
+    folders.sort((a, b) => a.id.localeCompare(b.id));
+    this.assets = assets;
+    this.byId = new Map(assets.map((a) => [a.id, a]));
+    this.folders = new Map(folders.map((f) => [f.id, f]));
+  }
+
+  // Shows the asset list saved by the last sync, until a fresh sync finishes.
+  async restore() {
+    if (!this.index) return;
+    try {
+      await this.index.load();
+      const { assets = [], folders = [], lastSync = null } = this.index.data;
+      if (!assets.length || this.lastSync) return;
+      this.setIndex(assets, folders);
+      this.lastSync = lastSync;
+      this.restoredFrom = lastSync;
+      this.savedIndexHash = hashIndex(this.assets, folders);
+      this.log.info(`Restored ${assets.length} assets from the index saved at ${lastSync}`);
+    } catch (err) {
+      this.log.error(`Failed to restore the saved index: ${err.message}`);
+    }
+  }
+
+  async saveIndex() {
+    const folders = [...this.folders.values()];
+    const hash = hashIndex(this.assets, folders);
+    if (hash === this.savedIndexHash) return; // nothing changed in Drive
+    const { assets, lastSync } = this;
+    await this.index.update((data) => {
+      data.assets = assets;
+      data.folders = folders;
+      data.lastSync = lastSync;
+    });
+    this.savedIndexHash = hash;
   }
 
   sync() {
@@ -55,14 +125,7 @@ class Library {
       const assets = [];
       const folders = new Map();
       const errors = [];
-      for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions]]) {
-        try {
-          await store.load();
-        } catch (err) {
-          errors.push({ store: name, message: err.message });
-          this.log.error(`Failed to load ${name}: ${err.message}`);
-        }
-      }
+      await this.loadStores(errors);
       await Promise.all(this.folderIds.map(async (id) => {
         try {
           const result = await this.drive.crawl(id);
@@ -71,17 +134,26 @@ class Library {
         } catch (err) {
           errors.push({ folderId: id, message: err.message });
           this.log.error(`Failed to sync folder ${id}: ${err.message}`);
+          // Keep what we already knew under this folder rather than dropping it.
+          const inRoot = (x) => x.id === id || x.ancestors[0]?.id === id;
+          assets.push(...this.assets.filter(inRoot));
+          for (const f of this.folders.values()) if (inRoot(f)) folders.set(f.id, f);
         }
       }));
-      assets.sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || ''));
-      this.assets = assets;
-      this.byId = new Map(assets.map((a) => [a.id, a]));
-      this.folders = folders;
+      this.setIndex(assets, [...folders.values()]);
       this.errors = errors;
       this.lastSync = new Date().toISOString();
+      this.restoredFrom = null;
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       this.log.info(`Synced ${assets.length} assets in ${folders.size} folders from ` +
         `${this.folderIds.length} root folder(s) in ${secs}s`);
+      if (this.index) {
+        try {
+          await this.saveIndex();
+        } catch (err) {
+          this.log.error(`Failed to save the index: ${err.message}`);
+        }
+      }
     })().finally(() => { this.syncing = null; });
     return this.syncing;
   }
@@ -167,6 +239,7 @@ class Library {
       folders: this.folders.size,
       roots: this.folderIds.length,
       lastSync: this.lastSync,
+      restoredFrom: this.restoredFrom,
       syncing: Boolean(this.syncing),
       storage: this.rights.persistent ? 'cloud-storage' : 'memory',
       errors: this.errors,

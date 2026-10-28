@@ -305,7 +305,33 @@ function card(asset) {
 }
 
 function renderMeta() {
+  if (state.indexing) {
+    $('meta').textContent = 'Indexing Google Drive… the first scan after setup can take a minute.';
+    return;
+  }
   $('meta').textContent = `${state.total.toLocaleString()} asset${state.total === 1 ? '' : 's'}`;
+}
+
+// After a restart the server shows its saved index while it re-checks Drive;
+// on a first run it has nothing yet. Either way, refresh once the sync is done.
+async function watchSync() {
+  let status;
+  try {
+    status = await api('/api/status');
+  } catch {
+    return;
+  }
+  const waiting = status.syncing && (!status.lastSync || status.restoredFrom);
+  state.indexing = status.syncing && !status.lastSync;
+  renderMeta();
+  if (waiting) {
+    state.watchingSync = true;
+    setTimeout(watchSync, 3000);
+  } else if (state.watchingSync) {
+    state.watchingSync = false;
+    await loadFolders();
+    await reloadInPlace();
+  }
 }
 
 async function load(reset = false) {
@@ -805,6 +831,7 @@ new IntersectionObserver((entries) => {
 (async () => {
   const assetId = readUrl();
   await Promise.all([loadFields(), loadFolders(), refreshAi()]);
+  watchSync();
   await load(true);
   if (assetId) {
     try {

@@ -10,6 +10,7 @@ const { Library } = require('./library');
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
+const { JsonStore } = require('./store');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -273,6 +274,8 @@ if (require.main === module) {
     rights: new RightsStore({ auth, bucket }),
     tags: new TagStore({ auth, bucket }),
     suggestions: new SuggestionStore({ auth, bucket }),
+    // The last synced asset list, so restarts don't start from an empty grid.
+    index: bucket ? new JsonStore({ auth, bucket, object: 'index.json', empty: () => ({ assets: [], folders: [] }) }) : null,
   });
   const suggester = new Suggester({
     library,

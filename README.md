@@ -22,6 +22,11 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 
 ## How it works
 
+Sync only reads Google Drive: it finds new, changed, moved and removed images and videos.
+Metadata (tags, usage rights, suggestions) is stored separately, keyed by each file's Drive
+ID, so a sync or a redeploy never changes it. If a folder can't be read during a sync (a
+Drive outage, a lost share), the assets already known under it are kept.
+
 ```
 Browser ──► Node/Express (Cloud Run) ──► Google Drive API (read-only, service account)
 ```
@@ -46,7 +51,7 @@ The server only serves files that are in the index.
 | `DRIVE_FOLDER_IDS` | yes | Folder IDs or full folder URLs, separated by spaces or commas (use spaces with `gcloud --set-env-vars`, which splits on commas) |
 | `DAM_PASSWORD` | no | Shared password (browser login prompt, any username) |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
-| `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`) and usage-rights flags (`rights.json`). Without it, both are lost on restart. `RIGHTS_BUCKET` is accepted as an older name |
+| `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`), usage rights (`rights.json`), Claude's suggestions (`suggestions.json`) and the last synced asset list (`index.json`). Without it, all of these are lost on every restart or deploy. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
 | `ANTHROPIC_API_KEY` | no | Claude API key. Turns on tag suggestions |
 | `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-opus-5-5` |
@@ -194,5 +199,6 @@ npm test   # runs without Google credentials (uses a fake Drive)
 
 ## Limits (by design, to keep it simple)
 - Read-only: uploads, tags and edits happen in Drive.
-- The index lives in memory: fine for tens of thousands of assets, and it rebuilds on restart.
+- The asset index lives in memory (fine for tens of thousands of assets). With a data bucket it is also
+  saved after each sync, so a restart shows it immediately and re-checks Drive in the background.
 - One shared password; there are no per-user accounts.

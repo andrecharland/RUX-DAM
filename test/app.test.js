@@ -77,8 +77,8 @@ test('lists, searches and filters assets', async () => {
     const folders = await (await fetch(`${base}/api/folders`)).json();
     assert.deepStrictEqual(
       folders.map(({ id, parentId, count }) => ({ id, parentId, count })),
-      [{ id: 'root', parentId: null, count: 2 }, { id: 'fPhotos', parentId: 'root', count: 1 },
-        { id: 'fVideos', parentId: 'root', count: 1 }],
+      [{ id: 'fPhotos', parentId: 'root', count: 1 }, { id: 'fVideos', parentId: 'root', count: 1 },
+        { id: 'root', parentId: null, count: 2 }],
     );
 
     const inPhotos = await (await fetch(`${base}/api/assets?folder=fPhotos`)).json();
