@@ -255,3 +255,9 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .vocab-import .btn { cursor: pointer; }
 .folder-ai:not(:empty) { margin-top: 12px; }
 .folder-ai .suggest { margin-bottom: 0; }
+
+.storage-warning {
+  margin: 14px 16px 0; padding: 10px 14px; border-radius: 10px;
+  background: var(--danger-bg); color: var(--danger); line-height: 1.5;
+}
+.storage-warning code { font-size: 12px; }

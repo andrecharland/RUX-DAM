@@ -48,6 +48,12 @@
     </aside>
 
     <main class="main">
+      <div id="storage-warning" class="storage-warning" role="alert" hidden>
+        <strong>Tags and lists aren't being saved.</strong>
+        This app has no storage bucket connected, so tags, product and color lists, usage rights and
+        suggestions are kept in memory and are wiped on every update or restart. Set the
+        <code>DATA_BUCKET</code> setting on the Cloud Run service (see the README) to keep them.
+      </div>
       <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
       <section id="folder-tags" class="folder-tags" hidden>
         <p class="hint">Tags on this folder apply to all <strong id="folder-count"></strong> assets inside it.</p>

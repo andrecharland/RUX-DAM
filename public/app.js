@@ -339,6 +339,7 @@ async function watchSync() {
   } catch {
     return;
   }
+  $('storage-warning').hidden = status.storage !== 'memory';
   const waiting = status.syncing && (!status.lastSync || status.restoredFrom);
   state.indexing = status.syncing && !status.lastSync;
   renderMeta();
