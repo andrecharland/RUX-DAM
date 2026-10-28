@@ -48,6 +48,11 @@ async function api(url, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (res.status === 401 && !url.startsWith('/api/me')) {
+    // Session expired: sign in again and come back to the same view.
+    location.href = `/auth/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+    return new Promise(() => {});
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed (${res.status})`);
@@ -960,7 +965,18 @@ new IntersectionObserver((entries) => {
   if (entries[0].isIntersecting && state.offset < state.total) load();
 }, { rootMargin: '600px' }).observe($('sentinel'));
 
+async function showUser() {
+  const user = await api('/api/me').catch(() => null);
+  if (!user) return;
+  $('user').hidden = false;
+  $('user').replaceChildren(
+    el('span', { text: user.email, title: user.name || user.email }),
+    el('a', { href: '/auth/logout', text: 'Sign out' }),
+  );
+}
+
 (async () => {
+  showUser();
   const assetId = readUrl();
   await Promise.all([loadFields(), loadFolders(), refreshAi()]);
   watchSync();

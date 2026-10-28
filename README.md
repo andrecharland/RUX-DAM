@@ -52,7 +52,12 @@ The server only serves files that are in the index.
 | Variable | Required | Description |
 |---|---|---|
 | `DRIVE_FOLDER_IDS` | yes | Folder IDs or full folder URLs, separated by spaces or commas (use spaces with `gcloud --set-env-vars`, which splits on commas) |
-| `DAM_PASSWORD` | no | Shared password (browser login prompt, any username) |
+| `GOOGLE_CLIENT_ID` | no | OAuth client ID. Turns on "Sign in with Google" (replaces `DAM_PASSWORD`) |
+| `GOOGLE_CLIENT_SECRET` | with sign-in | OAuth client secret (use Secret Manager) |
+| `ALLOWED_DOMAINS` | with sign-in | Google Workspace domains allowed in, e.g. `rux.life` |
+| `ALLOWED_EMAILS` | no | Individual Google accounts allowed in besides those domains (freelancers, agencies) |
+| `SESSION_SECRET` | with sign-in | Random string that signs sessions (use Secret Manager); without it, restarts sign everyone out |
+| `DAM_PASSWORD` | no | Shared password (browser login prompt, any username), used only when Google sign-in is off |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
 | `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`), usage rights (`rights.json`), Claude's suggestions (`suggestions.json`) and the last synced asset list (`index.json`). Without it, all of these are lost on every restart or deploy. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
@@ -227,6 +232,37 @@ if you want to be able to restore earlier flags.
 Anyone who can open the app can change flags (there are no per-user accounts), so keep
 `DAM_PASSWORD` on outside of testing.
 
+## Google sign-in
+
+With `GOOGLE_CLIENT_ID` set, everyone signs in with their Google account and only accounts in
+`ALLOWED_DOMAINS` (checked with Google's Workspace domain claim, not just the email text) or listed
+in `ALLOWED_EMAILS` get in. Sessions last 7 days; the header shows who's signed in, with **Sign out**.
+
+Setup:
+
+1. **Google Cloud Console → Google Auth Platform** (formerly *OAuth consent screen*) → **Get started**:
+   app name `RUX Assets`, your support email, and audience **Internal** if the project belongs to the
+   rux.life Google Workspace organization (otherwise **External**; the app only asks for name and
+   email, so it needs no Google verification).
+2. **Clients → Create client → Web application**, with the authorized redirect URI
+   `https://<your-service-url>/auth/callback`. Copy the client ID and secret.
+3. In Cloud Shell:
+
+```sh
+read -rs -p "OAuth client secret: " S; echo
+printf '%s' "$S" | gcloud secrets create oauth-client-secret --data-file=-; unset S
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create session-secret --data-file=-
+for s in oauth-client-secret session-secret; do
+  gcloud secrets add-iam-policy-binding $s \
+    --member=serviceAccount:rux-dam@<project-id>.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+done
+gcloud run services update rux-dam --region <region> \
+  --update-env-vars GOOGLE_CLIENT_ID=<client-id>.apps.googleusercontent.com,ALLOWED_DOMAINS=rux.life \
+  --update-secrets GOOGLE_CLIENT_SECRET=oauth-client-secret:latest,SESSION_SECRET=session-secret:latest
+```
+
+Keep the Cloud Run service's public access on: the app itself does the sign-in.
+
 ## Development
 ```sh
 npm test   # runs without Google credentials (uses a fake Drive)
@@ -236,4 +272,5 @@ npm test   # runs without Google credentials (uses a fake Drive)
 - Read-only: uploads, tags and edits happen in Drive.
 - The asset index lives in memory (fine for tens of thousands of assets). With a data bucket it is also
   saved after each sync, so a restart shows it immediately and re-checks Drive in the background.
-- One shared password; there are no per-user accounts.
+- Access is all-or-nothing per person: anyone allowed in sees every indexed folder (it doesn't
+  mirror each Drive folder's own sharing).

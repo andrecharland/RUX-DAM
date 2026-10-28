@@ -272,3 +272,6 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .date-custom input { padding: 6px 4px; min-width: 0; }
 .empty-note.small { font-size: 12px; margin: 6px 0 0; }
 #file-facets .facet { margin-top: 14px; }
+
+.user { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+.user a { color: var(--select); text-decoration: none; }

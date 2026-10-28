@@ -12,6 +12,7 @@ const { TagStore } = require('./tags');
 const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 const { JsonStore } = require('./store');
 const { ORDER: FILE_FACET_ORDER } = require('./fileinfo');
+const { googleSignIn } = require('./auth');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -51,12 +52,22 @@ async function pipeDrive(driveRes, res, passHeaders) {
   Readable.fromWeb(driveRes.body).on('error', () => res.destroy()).pipe(res);
 }
 
-function createApp({ library, drive, password, suggester }) {
+// Access: Google sign-in (`signIn`, see auth.js) when configured, otherwise the
+// optional shared password.
+function createApp({ library, drive, password, suggester, signIn }) {
   const app = express();
   app.disable('x-powered-by');
 
+  // Cloud Run terminates HTTPS in front of the app; trust its forwarded headers.
+  app.set('trust proxy', true);
   app.get('/healthz', (req, res) => res.send('ok'));
-  app.use(basicAuth(password));
+  if (signIn) {
+    app.use(signIn.router);
+    app.use(signIn.requireUser);
+  } else {
+    app.use(basicAuth(password));
+  }
+  app.get('/api/me', (req, res) => res.json(req.user || null));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   app.get('/api/assets', (req, res) => {
@@ -308,7 +319,26 @@ if (require.main === module) {
   // object's generation, so a failed load can't cause an edit to overwrite them.
   // Once loaded, collect results of batches submitted before a restart and keep checking.
   library.start().then(() => suggester.startPolling());
-  const app = createApp({ library, drive, suggester, password: process.env.DAM_PASSWORD });
+  const list = (v) => (v || '').split(/[\s,]+/).filter(Boolean);
+  let signIn = null;
+  if (process.env.GOOGLE_CLIENT_ID) {
+    let sessionSecret = process.env.SESSION_SECRET;
+    if (!sessionSecret) {
+      sessionSecret = crypto.randomBytes(32).toString('hex');
+      console.warn('SESSION_SECRET is not set: everyone is signed out whenever the service restarts.');
+    }
+    signIn = googleSignIn({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim(),
+      sessionSecret,
+      allowedDomains: list(process.env.ALLOWED_DOMAINS),
+      allowedEmails: list(process.env.ALLOWED_EMAILS),
+    });
+    if (!list(process.env.ALLOWED_DOMAINS).length && !list(process.env.ALLOWED_EMAILS).length) {
+      console.warn('Google sign-in is on but ALLOWED_DOMAINS and ALLOWED_EMAILS are empty: nobody can sign in.');
+    }
+  }
+  const app = createApp({ library, drive, suggester, signIn, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));
 }
