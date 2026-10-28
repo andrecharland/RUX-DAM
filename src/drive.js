@@ -1,6 +1,6 @@
 'use strict';
 
-const { GoogleAuth } = require('google-auth-library');
+const { authedFetch } = require('./google');
 
 const API = 'https://www.googleapis.com/drive/v3';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -8,21 +8,14 @@ const FIELDS = 'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTi
   'thumbnailLink,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis),' +
   'webViewLink,parents)';
 
-// Credentials come from GOOGLE_SERVICE_ACCOUNT_JSON (raw JSON), or else Application
-// Default Credentials (GOOGLE_APPLICATION_CREDENTIALS, or the Cloud Run service account).
-function createAuth(env = process.env) {
-  const opts = { scopes: ['https://www.googleapis.com/auth/drive.readonly'] };
-  if (env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    opts.credentials = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  }
-  return new GoogleAuth(opts);
-}
-
 function isMedia(mimeType) {
   return mimeType.startsWith('image/') || mimeType.startsWith('video/');
 }
 
-function toAsset(file, folderPath, rootName) {
+// `ancestors` is the folder chain from the configured root down to the file's
+// own folder, as [{ id, name }]. It lets rights flags set on a folder apply to
+// everything inside it.
+function toAsset(file, folderPath, rootName, ancestors = []) {
   const meta = file.imageMediaMetadata || file.videoMediaMetadata || {};
   return {
     id: file.id,
@@ -40,22 +33,20 @@ function toAsset(file, folderPath, rootName) {
     webViewLink: file.webViewLink,
     collection: rootName,
     path: folderPath,
+    ancestors,
   };
 }
 
 class DriveClient {
-  constructor(auth) {
+  constructor(auth, { concurrency = 8 } = {}) {
     this.auth = auth;
+    this.concurrency = concurrency;
   }
 
   async request(path, { params = {}, headers = {}, raw = false } = {}) {
-    const client = await this.auth.getClient();
-    const authHeaders = await client.getRequestHeaders();
     const url = new URL(path.startsWith('http') ? path : API + path);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const res = await fetch(url, {
-      headers: { ...Object.fromEntries(new Headers(authHeaders)), ...headers },
-    });
+    const res = await authedFetch(this.auth, url, { headers });
     if (raw) return res;
     if (!res.ok) {
       throw new Error(`Drive API ${res.status}: ${await res.text()}`);
@@ -88,25 +79,48 @@ class DriveClient {
     return files;
   }
 
-  // Walks a root folder recursively and returns every image/video in it.
+  // Walks a root folder recursively, listing up to `concurrency` folders at once.
+  // Returns every image/video and every folder found.
   async crawl(rootId) {
     const root = await this.getFile(rootId);
     const assets = [];
-    const queue = [{ id: rootId, path: '' }];
-    const seen = new Set();
-    while (queue.length) {
-      const { id, path } = queue.shift();
-      if (seen.has(id)) continue;
-      seen.add(id);
+    const folders = [{ id: rootId, name: root.name, path: '', ancestors: [] }];
+    const seen = new Set([rootId]);
+    const queue = [{ id: rootId, path: '', ancestors: [{ id: rootId, name: root.name }] }];
+
+    const visit = async ({ id, path, ancestors }) => {
       for (const file of await this.listChildren(id)) {
         if (file.mimeType === FOLDER_MIME) {
-          queue.push({ id: file.id, path: path ? `${path}/${file.name}` : file.name });
+          if (seen.has(file.id)) continue;
+          seen.add(file.id);
+          const childPath = path ? `${path}/${file.name}` : file.name;
+          folders.push({ id: file.id, name: file.name, path: childPath, ancestors });
+          queue.push({
+            id: file.id,
+            path: childPath,
+            ancestors: [...ancestors, { id: file.id, name: file.name }],
+          });
         } else if (isMedia(file.mimeType)) {
-          assets.push(toAsset(file, path, root.name));
+          assets.push(toAsset(file, path, root.name, ancestors));
         }
       }
-    }
-    return assets;
+    };
+
+    await new Promise((resolve, reject) => {
+      let active = 0;
+      let failed = false;
+      const pump = () => {
+        if (failed) return;
+        if (!queue.length && !active) return resolve();
+        while (active < this.concurrency && queue.length) {
+          active++;
+          visit(queue.shift()).then(() => { active--; pump(); }, (err) => { failed = true; reject(err); });
+        }
+      };
+      pump();
+    });
+
+    return { assets, folders };
   }
 
   // Drive thumbnail links need auth, so the server proxies them.
@@ -126,4 +140,4 @@ class DriveClient {
   }
 }
 
-module.exports = { DriveClient, createAuth, isMedia, toAsset };
+module.exports = { DriveClient, isMedia, toAsset };

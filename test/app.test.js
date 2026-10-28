@@ -4,15 +4,31 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createApp, parseFolderIds } = require('../src/server');
 const { Library } = require('../src/library');
-const { toAsset } = require('../src/drive');
+const { DriveClient, toAsset } = require('../src/drive');
+const { RightsStore } = require('../src/rights');
 
 const files = [
   { id: 'img1', name: 'Hero Shot.jpg', mimeType: 'image/jpeg', size: '2048', modifiedTime: '2026-01-02T00:00:00Z', thumbnailLink: 'x', imageMediaMetadata: { width: 100, height: 50 } },
   { id: 'vid1', name: 'Launch.mp4', mimeType: 'video/mp4', size: '9999', modifiedTime: '2026-01-03T00:00:00Z', videoMediaMetadata: { durationMillis: '61000' } },
 ];
 
+const quiet = { info() {}, warn() {}, error() {} };
+const root = { id: 'root', name: 'Brand' };
+const photos = { id: 'fPhotos', name: 'Photos' };
+const videos = { id: 'fVideos', name: 'Videos' };
+
 const fakeDrive = {
-  crawl: async () => files.map((f, i) => toAsset(f, i ? 'Videos' : 'Photos/2026', 'Brand')),
+  crawl: async () => ({
+    assets: [
+      toAsset(files[0], 'Photos', 'Brand', [root, photos]),
+      toAsset(files[1], 'Videos', 'Brand', [root, videos]),
+    ],
+    folders: [
+      { id: 'root', name: 'Brand', path: '', ancestors: [] },
+      { id: 'fPhotos', name: 'Photos', path: 'Photos', ancestors: [root] },
+      { id: 'fVideos', name: 'Videos', path: 'Videos', ancestors: [root] },
+    ],
+  }),
   thumbnail: async () => new Response('thumb', { headers: { 'content-type': 'image/jpeg' } }),
   media: async (id, range) => new Response(`bytes:${id}:${range || ''}`, {
     status: range ? 206 : 200,
@@ -21,7 +37,8 @@ const fakeDrive = {
 };
 
 async function withServer(opts, fn) {
-  const library = new Library(fakeDrive, ['root'], { log: { info() {}, error() {} } });
+  const rights = new RightsStore({ log: quiet });
+  const library = new Library(fakeDrive, ['root'], { rights, log: quiet });
   await library.sync();
   const server = createApp({ library, drive: fakeDrive, ...opts }).listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -48,7 +65,7 @@ test('lists, searches and filters assets', async () => {
     const hero = await (await fetch(`${base}/api/assets?q=hero`)).json();
     assert.deepStrictEqual(hero.items.map((a) => a.id), ['img1']);
 
-    const byPath = await (await fetch(`${base}/api/assets?q=photos%202026`)).json();
+    const byPath = await (await fetch(`${base}/api/assets?q=brand%20photos`)).json();
     assert.deepStrictEqual(byPath.items.map((a) => a.id), ['img1']);
 
     const videos = await (await fetch(`${base}/api/assets?kind=video`)).json();
@@ -81,4 +98,70 @@ test('password gate', async () => {
     const auth = { Authorization: `Basic ${Buffer.from('rux:s3cret').toString('base64')}` };
     assert.strictEqual((await fetch(`${base}/api/assets`, { headers: auth })).status, 200);
   });
+});
+
+const post = (url, body) => fetch(url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
+
+test('usage rights: default, folder flags, file overrides, filter', async () => {
+  await withServer({}, async (base) => {
+    const get = async (id) => (await fetch(`${base}/api/assets/${id}`)).json();
+    assert.deepStrictEqual((await get('img1')).rights, { status: 'cleared', note: '', source: { scope: 'default' } });
+
+    assert.strictEqual((await post(`${base}/api/rights/fPhotos`, { status: 'restricted', note: 'no release' })).status, 200);
+    const flagged = (await get('img1')).rights;
+    assert.strictEqual(flagged.status, 'restricted');
+    assert.strictEqual(flagged.note, 'no release');
+    assert.deepStrictEqual(flagged.source, { scope: 'folder', id: 'fPhotos', name: 'Photos' });
+    assert.strictEqual((await get('vid1')).rights.status, 'cleared', 'sibling folder unaffected');
+
+    const restricted = await (await fetch(`${base}/api/assets?rights=restricted`)).json();
+    assert.deepStrictEqual(restricted.items.map((a) => a.id), ['img1']);
+
+    // A file flag overrides its folder; removing it falls back to the folder.
+    await post(`${base}/api/rights/img1`, { status: 'cleared' });
+    assert.strictEqual((await get('img1')).rights.source.scope, 'file');
+    assert.strictEqual((await get('img1')).rights.status, 'cleared');
+    await post(`${base}/api/rights/img1`, { status: 'inherit' });
+    assert.strictEqual((await get('img1')).rights.status, 'restricted');
+
+    // A flag on the root covers everything without a closer flag.
+    await post(`${base}/api/rights/root`, { status: 'restricted' });
+    assert.strictEqual((await get('vid1')).rights.source.id, 'root');
+
+    assert.strictEqual((await post(`${base}/api/rights/unknown`, { status: 'restricted' })).status, 404);
+    assert.strictEqual((await post(`${base}/api/rights/img1`, { status: 'maybe' })).status, 400);
+  });
+});
+
+test('crawl walks nested folders in parallel and records ancestors', async () => {
+  const tree = {
+    root: [{ id: 'a', name: 'A', mimeType: 'application/vnd.google-apps.folder' },
+      { id: 'b', name: 'B', mimeType: 'application/vnd.google-apps.folder' },
+      { id: 'x.jpg', name: 'x.jpg', mimeType: 'image/jpeg' },
+      { id: 'doc', name: 'notes.pdf', mimeType: 'application/pdf' }],
+    a: [{ id: 'a1', name: 'A1', mimeType: 'application/vnd.google-apps.folder' },
+      { id: 'y.mp4', name: 'y.mp4', mimeType: 'video/mp4' }],
+    b: [{ id: 'z.png', name: 'z.png', mimeType: 'image/png' }],
+    a1: [{ id: 'w.jpg', name: 'w.jpg', mimeType: 'image/jpeg' },
+      { id: 'a', name: 'A', mimeType: 'application/vnd.google-apps.folder' }], // cycle via shortcut-like re-parenting
+  };
+  const drive = new DriveClient(null, { concurrency: 2 });
+  let active = 0;
+  let peak = 0;
+  drive.getFile = async () => ({ id: 'root', name: 'Root' });
+  drive.listChildren = async (id) => {
+    peak = Math.max(peak, ++active);
+    await new Promise((r) => setTimeout(r, 5));
+    active--;
+    return tree[id];
+  };
+  const { assets, folders } = await drive.crawl('root');
+  assert.deepStrictEqual(assets.map((a) => a.id).sort(), ['w.jpg', 'x.jpg', 'y.mp4', 'z.png']);
+  assert.deepStrictEqual(folders.map((f) => f.path).sort(), ['', 'A', 'A/A1', 'B']);
+  const w = assets.find((a) => a.id === 'w.jpg');
+  assert.strictEqual(w.path, 'A/A1');
+  assert.deepStrictEqual(w.ancestors.map((f) => f.id), ['root', 'a', 'a1']);
+  assert.strictEqual(peak, 2, 'listed folders concurrently, capped at the limit');
 });

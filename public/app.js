@@ -4,7 +4,7 @@ const PAGE = 120;
 const $ = (id) => document.getElementById(id);
 const grid = $('grid');
 const viewer = $('viewer');
-const state = { q: '', kind: '', collection: '', offset: 0, total: 0, loading: false, items: new Map() };
+const state = { q: '', kind: '', collection: '', rights: '', current: null, offset: 0, total: 0, loading: false, items: new Map() };
 
 function formatBytes(n) {
   if (n == null) return '—';
@@ -40,7 +40,9 @@ function card(asset) {
   if (asset.kind === 'video') {
     thumb.append(el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }));
   }
-  const button = el('button', { class: 'card', type: 'button', 'data-id': asset.id }, [
+  const restricted = asset.rights.status === 'restricted';
+  if (restricted) thumb.append(el('span', { class: 'flag', text: 'Do not use' }));
+  const button = el('button', { class: restricted ? 'card restricted' : 'card', type: 'button', 'data-id': asset.id }, [
     thumb,
     el('div', { class: 'caption' }, [
       el('div', { class: 'name', text: asset.name, title: asset.name }),
@@ -60,7 +62,7 @@ async function load(reset = false) {
     grid.replaceChildren();
   }
   const params = new URLSearchParams({
-    q: state.q, kind: state.kind, collection: state.collection,
+    q: state.q, kind: state.kind, collection: state.collection, rights: state.rights,
     offset: state.offset, limit: PAGE,
   });
   try {
@@ -86,7 +88,65 @@ async function loadCollections() {
   select.value = state.collection;
 }
 
+function folderLabel(ancestors, i) {
+  return ancestors.slice(0, i + 1).map((f) => f.name).join(' / ');
+}
+
+function renderRights(asset) {
+  const r = asset.rights;
+  const where = r.source.scope === 'file' ? 'set on this file'
+    : r.source.scope === 'folder' ? `set on folder “${r.source.name}”`
+      : 'default, no flag set';
+  const current = $('r-current');
+  current.className = `r-current ${r.status}`;
+  current.textContent = `${r.status === 'restricted' ? '⛔ Do not use' : '✓ Cleared'} (${where})` +
+    (r.note ? ` — ${r.note}` : '') +
+    (r.updatedAt ? ` · ${new Date(r.updatedAt).toLocaleDateString()}` : '');
+
+  for (const radio of document.getElementsByName('r-status')) radio.checked = radio.value === r.status;
+  $('r-note').value = r.note || '';
+
+  // Targets: this file, then each enclosing folder from nearest to the root.
+  const target = $('r-target');
+  target.replaceChildren(el('option', { value: asset.id, text: 'This file only' }));
+  for (let i = asset.ancestors.length - 1; i >= 0; i--) {
+    const f = asset.ancestors[i];
+    target.append(el('option', { value: f.id, text: `Folder: ${folderLabel(asset.ancestors, i)}` }));
+  }
+  target.value = r.source.scope === 'folder' ? r.source.id : asset.id;
+  // The note shown belongs to whichever item the flag is on; start blank for any other target.
+  const flaggedId = r.source.scope === 'default' ? null : target.value;
+  target.onchange = () => { $('r-note').value = target.value === flaggedId ? r.note : ''; };
+  $('r-msg').textContent = '';
+}
+
+async function saveRights(status) {
+  const asset = state.current;
+  const targetId = $('r-target').value;
+  const isFolder = targetId !== asset.id;
+  const msg = $('r-msg');
+  msg.textContent = 'Saving…';
+  const res = await fetch(`/api/rights/${encodeURIComponent(targetId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, note: status === 'inherit' ? '' : $('r-note').value }),
+  });
+  if (!res.ok) {
+    msg.textContent = `Could not save (${res.status}).`;
+    return;
+  }
+  const fresh = await (await fetch(`/api/assets/${asset.id}`)).json();
+  state.current = fresh;
+  state.items.set(fresh.id, fresh);
+  renderRights(fresh);
+  $('r-msg').textContent = isFolder ? 'Saved for the whole folder.' : 'Saved.';
+  // A folder flag can change many cards, so reload the grid.
+  if (isFolder || state.rights) load(true);
+  else grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
+}
+
 function open(asset) {
+  state.current = asset;
   const fileUrl = `/api/assets/${asset.id}/file`;
   const stage = $('stage');
   stage.replaceChildren(asset.kind === 'video'
@@ -103,6 +163,7 @@ function open(asset) {
   ];
   $('d-meta').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
   $('d-download').href = `${fileUrl}?download=1`;
+  renderRights(asset);
   $('d-drive').href = asset.webViewLink;
   $('d-copy').onclick = async () => {
     await navigator.clipboard.writeText(new URL(fileUrl, location.href).href);
@@ -117,6 +178,18 @@ grid.addEventListener('click', (e) => {
   if (target) open(state.items.get(target.dataset.id));
 });
 $('close').addEventListener('click', () => viewer.close());
+$('d-download').addEventListener('click', (e) => {
+  const r = state.current?.rights;
+  if (r?.status === 'restricted' &&
+      !confirm(`This asset is marked Do not use${r.note ? `: ${r.note}` : ''}.\n\nDownload anyway?`)) {
+    e.preventDefault();
+  }
+});
+$('r-save').addEventListener('click', () => {
+  const checked = document.querySelector('input[name="r-status"]:checked');
+  saveRights(checked ? checked.value : 'cleared');
+});
+$('r-reset').addEventListener('click', () => saveRights('inherit'));
 viewer.addEventListener('close', () => $('stage').replaceChildren());
 
 let debounce;
@@ -126,6 +199,7 @@ $('q').addEventListener('input', (e) => {
 });
 $('kind').addEventListener('change', (e) => { state.kind = e.target.value; load(true); });
 $('collection').addEventListener('change', (e) => { state.collection = e.target.value; load(true); });
+$('rights').addEventListener('change', (e) => { state.rights = e.target.value; load(true); });
 $('sync').addEventListener('click', async (e) => {
   e.target.disabled = true;
   e.target.textContent = 'Syncing…';

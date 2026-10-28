@@ -4,8 +4,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
 const express = require('express');
-const { DriveClient, createAuth } = require('./drive');
+const { createAuth } = require('./google');
+const { DriveClient } = require('./drive');
 const { Library } = require('./library');
+const { RightsStore } = require('./rights');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -60,13 +62,37 @@ function createApp({ library, drive, password }) {
       q: String(req.query.q || ''),
       kind: String(req.query.kind || ''),
       collection: String(req.query.collection || ''),
+      rights: String(req.query.rights || ''),
       offset,
       limit,
     }));
   });
 
+  app.get('/api/assets/:id', (req, res) => {
+    const asset = library.byId.get(req.params.id);
+    if (!asset) return res.sendStatus(404);
+    res.json(library.view(asset));
+  });
+
   app.get('/api/collections', (req, res) => res.json(library.collections()));
   app.get('/api/status', (req, res) => res.json(library.status()));
+
+  // Set usage rights on an indexed file or folder. status: cleared | restricted | inherit
+  app.post('/api/rights/:id', express.json(), async (req, res, next) => {
+    const { id } = req.params;
+    if (!library.has(id) && !library.folders.has(id)) return res.sendStatus(404);
+    const { status, note } = req.body || {};
+    if (!['cleared', 'restricted', 'inherit'].includes(status)) {
+      return res.status(400).json({ error: 'status must be cleared, restricted or inherit' });
+    }
+    try {
+      await library.rights.set(id, status, note || '');
+      const asset = library.byId.get(id);
+      res.json(asset ? library.view(asset) : { id, flag: library.rights.get(id) });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   app.post('/api/sync', async (req, res, next) => {
     try {
@@ -121,10 +147,15 @@ if (require.main === module) {
     console.error('Set DRIVE_FOLDER_IDS to one or more Google Drive folder IDs or URLs.');
     process.exit(1);
   }
-  const drive = new DriveClient(createAuth());
+  const auth = createAuth();
+  const drive = new DriveClient(auth, { concurrency: Number(process.env.SYNC_CONCURRENCY) || 8 });
+  const rights = new RightsStore({ auth, bucket: process.env.RIGHTS_BUCKET });
   const library = new Library(drive, folderIds, {
     refreshMs: (Number(process.env.REFRESH_MINUTES) || 10) * 60 * 1000,
+    rights,
   });
+  // Each sync reloads the rights flags too. Saves are conditional on the stored
+  // object's generation, so a failed load can't cause an edit to overwrite them.
   library.start();
   const app = createApp({ library, drive, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;

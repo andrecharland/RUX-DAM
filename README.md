@@ -10,6 +10,7 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 - Search by file name or folder path; filter by type (image or video) and by top-level folder
 - Preview images and stream videos (with seeking) in the browser
 - Download originals, open in Drive, copy a direct link
+- Usage-rights flags: mark a file or a whole folder **Do not use** (with a note), filter by rights
 - Auto re-sync every 10 minutes, plus a manual **Sync** button
 - Optional shared password
 - Works with My Drive and Shared Drives
@@ -40,6 +41,8 @@ The server only serves files that are in the index.
 | `DRIVE_FOLDER_IDS` | yes | Folder IDs or full folder URLs, separated by spaces or commas (use spaces with `gcloud --set-env-vars`, which splits on commas) |
 | `DAM_PASSWORD` | no | Shared password (browser login prompt, any username) |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
+| `RIGHTS_BUCKET` | no | Cloud Storage bucket for usage-rights flags. Without it, flags are lost on restart |
+| `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | no | Path to a key file (local dev) |
 | `PORT` | no | Default `8080` |
@@ -64,12 +67,41 @@ gcloud run deploy rux-dam \
   --allow-unauthenticated \
   --min-instances 1
 ```
-`--min-instances 1` keeps the index warm so it isn't rebuilt on every cold start.
+`--min-instances 1` keeps the index warm so it isn't rebuilt on every cold start. Also add
+`--no-cpu-throttling` ("CPU is always allocated" in the console): otherwise Cloud Run
+throttles the CPU between requests, which stalls the startup scan and the periodic re-sync.
 For Google-account sign-in in place of a shared password, put Cloud Run behind
 Identity-Aware Proxy and drop `DAM_PASSWORD`.
 
 The included `Dockerfile` also runs on any container host (Fly.io, Render, Railway).
 There, pass the key through `GOOGLE_SERVICE_ACCOUNT_JSON`.
+
+## Usage rights
+
+Every asset is **Cleared** by default. In the viewer, choose **Do not use** (optionally
+with a note), pick whether it applies to *this file only* or to one of its enclosing
+folders, and click **Save rights**. A folder flag covers everything inside it; a flag on
+a file or a deeper folder overrides it. **Remove flag** deletes the flag from the selected
+file or folder so it falls back to the folder above (or the default).
+
+Restricted assets show a red **Do not use** badge, can be filtered with the rights
+selector, and ask for confirmation before downloading.
+
+Flags are keyed by Drive ID, so they survive renames and moves inside the indexed folders.
+They are stored as `rights.json` in a Cloud Storage bucket:
+
+```sh
+gcloud storage buckets create gs://<project-id>-rux-dam-rights --location=<region> --uniform-bucket-level-access
+gcloud storage buckets add-iam-policy-binding gs://<project-id>-rux-dam-rights \
+  --member=serviceAccount:rux-dam@<project-id>.iam.gserviceaccount.com --role=roles/storage.objectUser
+gcloud run services update rux-dam --region <region> --update-env-vars RIGHTS_BUCKET=<project-id>-rux-dam-rights
+```
+
+Turn on object versioning on the bucket (`gcloud storage buckets update gs://… --versioning`)
+if you want to be able to restore earlier flags.
+
+Anyone who can open the app can change flags (there are no per-user accounts), so keep
+`DAM_PASSWORD` on outside of testing.
 
 ## Development
 ```sh
