@@ -12,6 +12,12 @@ function isMedia(mimeType) {
   return mimeType.startsWith('image/') || mimeType.startsWith('video/');
 }
 
+// macOS "AppleDouble" files (`._name.jpg`) are Finder metadata copied alongside
+// real files, not images, even though Drive types them by their extension.
+function isJunk(name) {
+  return name.startsWith('._');
+}
+
 // `ancestors` is the folder chain from the configured root down to the file's
 // own folder, as [{ id, name }]. It lets rights flags set on a folder apply to
 // everything inside it.
@@ -100,7 +106,7 @@ class DriveClient {
             path: childPath,
             ancestors: [...ancestors, { id: file.id, name: file.name }],
           });
-        } else if (isMedia(file.mimeType)) {
+        } else if (isMedia(file.mimeType) && !isJunk(file.name)) {
           assets.push(toAsset(file, path, root.name, ancestors));
         }
       }

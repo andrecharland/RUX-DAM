@@ -149,6 +149,7 @@ test('crawl walks nested folders in parallel and records ancestors', async () =>
     root: [{ id: 'a', name: 'A', mimeType: 'application/vnd.google-apps.folder' },
       { id: 'b', name: 'B', mimeType: 'application/vnd.google-apps.folder' },
       { id: 'x.jpg', name: 'x.jpg', mimeType: 'image/jpeg' },
+      { id: '._x.jpg', name: '._x.jpg', mimeType: 'image/jpeg' }, // macOS metadata file
       { id: 'doc', name: 'notes.pdf', mimeType: 'application/pdf' }],
     a: [{ id: 'a1', name: 'A1', mimeType: 'application/vnd.google-apps.folder' },
       { id: 'y.mp4', name: 'y.mp4', mimeType: 'video/mp4' }],
