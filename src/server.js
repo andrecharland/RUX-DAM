@@ -11,6 +11,7 @@ const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 const { JsonStore } = require('./store');
+const { ORDER: FILE_FACET_ORDER } = require('./fileinfo');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -61,16 +62,20 @@ function createApp({ library, drive, password, suggester }) {
   app.get('/api/assets', (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    res.json(library.search({
+    res.json({ fileOrder: FILE_FACET_ORDER, ...library.search({
       q: String(req.query.q || ''),
       kind: String(req.query.kind || ''),
       folder: String(req.query.folder || ''),
       rights: String(req.query.rights || ''),
       tags: [].concat(req.query.tag || []).map(String),
       suggested: String(req.query.suggested || ''),
+      file: [].concat(req.query.f || []).map(String),
+      from: /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? req.query.from : '',
+      to: /^\d{4}-\d{2}-\d{2}$/.test(req.query.to) ? req.query.to : '',
+      sort: String(req.query.sort || 'modified'),
       offset,
       limit,
-    }));
+    }) });
   });
 
   app.get('/api/assets/:id', (req, res) => {

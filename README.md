@@ -11,6 +11,9 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 - Metadata fields (Product, Activity, Color, Vehicle, Season, Event, Location, People,
   Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
 - Search by file name, folder path or metadata; filter by type (image or video)
+- Filter by file details: date taken (presets or a custom range), year, format (JPG, RAW, HEIC,
+  MP4, MOV…), orientation, resolution, file size, video length and camera; sort by date taken,
+  date added, name, file size or video length
 - Tag suggestions from Claude (product, activity, color, vehicle, season, keywords) that you accept or dismiss
 - Shareable links: the URL always reflects the current folder, filters, search and open asset
 - Preview images and stream videos (with seeking) in the browser
@@ -179,6 +182,23 @@ filters and the open asset. **Copy link to this view** (above the grid) and **Co
 this asset** (in the viewer) copy it, e.g.
 `…/?tag=product:Duffel&tag=season:Winter&rights=cleared` opens straight to cleared Duffel
 photos tagged Winter. People opening the link need the app's password, if one is set.
+
+## Finding files by date, format and size
+
+The **File details** filters in the sidebar come from Google Drive's file information:
+
+- **Date taken**: Last 7 days, Last 30 days, Last 12 months, This year, or a custom range. It uses
+  the capture date the camera wrote into the photo when there is one, otherwise the date the
+  file was added to Drive (videos always use the date added). **Year taken** lists years with counts.
+- **Format** (RAW covers CR2/CR3, NEF, ARW, DNG, RAF and other camera raw files), **Orientation**
+  (landscape, portrait, square, panorama), **Resolution** (under 2 MP for web up to 24 MP+ for print),
+  **File size**, **Video length** and **Camera**.
+
+Values within one group are combined with OR, different groups with AND, and each group's counts
+show what selecting another value would add. The header's sort menu orders results by newest or
+oldest taken, recently added, name, largest file or longest video. The search box also matches
+camera, format and year (e.g. `raw 2025`, `iphone`). All of it is kept in the address bar, so
+links like `?range=30d&f=orientation:Portrait` can be shared.
 
 ## Usage rights
 

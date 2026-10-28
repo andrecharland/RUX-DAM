@@ -7,6 +7,7 @@ const grid = $('grid');
 const viewer = $('viewer');
 const state = {
   q: '', kind: '', rights: '', folder: '', tags: new Set(), suggested: '',
+  file: new Set(), range: '', from: '', to: '', sort: '', fileFacets: {}, fileOrder: {},
   ai: { enabled: false }, aiWasBusy: false,
   offset: 0, total: 0, loading: false, items: new Map(), facets: {},
   current: null, selected: new Set(), lastPicked: null,
@@ -57,11 +58,28 @@ async function api(url, body) {
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 const fieldLabel = (key) => state.fields.find((f) => f.key === key)?.label || key;
 
+// The date filter as from/to (YYYY-MM-DD). Presets are relative to today, so a
+// shared "Last 30 days" link stays relative.
+function dateRange() {
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const ago = (days) => iso(new Date(Date.now() - days * 864e5));
+  switch (state.range) {
+    case '7d': return { from: ago(7), to: '' };
+    case '30d': return { from: ago(30), to: '' };
+    case '12m': return { from: ago(365), to: '' };
+    case 'year': return { from: `${new Date().getFullYear()}-01-01`, to: '' };
+    case 'custom': return { from: state.from, to: state.to };
+    default: return { from: '', to: '' };
+  }
+}
+
 function queryParams(extra = {}) {
   const params = new URLSearchParams({
     q: state.q, kind: state.kind, rights: state.rights, folder: state.folder, suggested: state.suggested,
+    sort: state.sort, ...dateRange(),
   });
   for (const t of state.tags) params.append('tag', t);
+  for (const f of state.file) params.append('f', f);
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
   return params;
 }
@@ -72,8 +90,13 @@ function queryParams(extra = {}) {
 // so copying it shares exactly what's on screen.
 function writeUrl() {
   const params = new URLSearchParams();
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder']) if (state[key]) params.set(key, state[key]);
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range']) if (state[key]) params.set(key, state[key]);
+  if (state.range === 'custom') {
+    if (state.from) params.set('from', state.from);
+    if (state.to) params.set('to', state.to);
+  }
   for (const t of state.tags) params.append('tag', t);
+  for (const f of state.file) params.append('f', f);
   if (viewer.open && state.current) params.set('asset', state.current.id);
   const qs = params.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
@@ -82,8 +105,14 @@ function writeUrl() {
 // Reads the view from the URL; returns the asset to open, if any.
 function readUrl() {
   const params = new URLSearchParams(location.search);
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder']) state[key] = params.get(key) || '';
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'from', 'to']) state[key] = params.get(key) || '';
   state.tags = new Set(params.getAll('tag'));
+  state.file = new Set(params.getAll('f'));
+  $('sort').value = state.sort;
+  $('date-range').value = state.range;
+  $('date-from').value = state.from;
+  $('date-to').value = state.to;
+  $('date-custom').hidden = state.range !== 'custom';
   $('q').value = state.q;
   $('kind').value = state.kind;
   $('rights').value = state.rights;
@@ -372,6 +401,8 @@ async function load(reset = false) {
       grid.append(card(a));
     }
     state.facets = data.facets;
+    state.fileFacets = data.fileFacets || {};
+    state.fileOrder = data.fileOrder || {};
     renderMeta();
     renderFacets();
   } finally {
@@ -387,6 +418,7 @@ async function reloadInPlace() {
   state.offset = data.items.length;
   state.items = new Map(data.items.map((a) => [a.id, a]));
   state.facets = data.facets;
+  state.fileFacets = data.fileFacets || {};
   grid.replaceChildren(...data.items.map(card));
   renderMeta();
   renderFacets();
@@ -407,41 +439,63 @@ async function afterEdit() {
 
 // ---------- filters ----------
 
-function renderFacets() {
-  const groups = [];
-  for (const f of state.fields) {
-    const counts = { ...state.facets[f.key] };
-    for (const t of state.tags) {
-      const [key, ...rest] = t.split(':');
-      if (key === f.key && !(rest.join(':') in counts)) counts[rest.join(':')] = 0;
-    }
-    const values = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    if (!values.length) continue;
-    const open = state.facetsOpen.has(f.key);
-    const shown = open ? values : values.slice(0, FACET_LIMIT);
-    groups.push(el('div', { class: 'facet' }, [
-      el('h3', { text: f.label }),
-      ...shown.map(([value, count]) => {
-        const id = `${f.key}:${value}`;
-        return el('label', {}, [
-          el('input', {
-            type: 'checkbox', checked: state.tags.has(id),
-            onchange: (e) => { state.tags[e.target.checked ? 'add' : 'delete'](id); load(true); },
-          }),
-          el('span', { text: value }),
-          el('span', { class: 'count', text: count }),
-        ]);
-      }),
-      values.length > FACET_LIMIT ? el('button', {
-        type: 'button', class: 'link more',
-        text: open ? 'Show less' : `Show ${values.length - FACET_LIMIT} more`,
-        onclick: () => { state.facetsOpen[open ? 'delete' : 'add'](f.key); renderFacets(); },
-      }) : '',
-    ]));
+// One filter group: checkboxes with counts. `selected` holds "key:value"
+// strings; values selected but absent from the current results still show.
+// `order` is a fixed display order, 'desc' sorts values descending (years),
+// otherwise the most common values come first.
+function facetGroup({ key, label, counts, selected, order, onToggle }) {
+  counts = { ...counts };
+  for (const id of selected) {
+    const i = id.indexOf(':');
+    if (id.slice(0, i) === key && !(id.slice(i + 1) in counts)) counts[id.slice(i + 1)] = 0;
   }
+  let values = Object.entries(counts);
+  if (!values.length) return null;
+  if (Array.isArray(order)) values.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+  else if (order === 'desc') values.sort((a, b) => b[0].localeCompare(a[0]));
+  else values.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const open = state.facetsOpen.has(key);
+  const shown = open ? values : values.slice(0, FACET_LIMIT);
+  return el('div', { class: 'facet' }, [
+    el('h3', { text: label }),
+    ...shown.map(([value, count]) => {
+      const id = `${key}:${value}`;
+      return el('label', {}, [
+        el('input', { type: 'checkbox', checked: selected.has(id), onchange: (e) => onToggle(id, e.target.checked) }),
+        el('span', { text: value }),
+        el('span', { class: 'count', text: count }),
+      ]);
+    }),
+    values.length > FACET_LIMIT ? el('button', {
+      type: 'button', class: 'link more',
+      text: open ? 'Show less' : `Show ${values.length - FACET_LIMIT} more`,
+      onclick: () => { state.facetsOpen[open ? 'delete' : 'add'](key); renderFacets(); },
+    }) : '',
+  ]);
+}
+
+const FILE_FACETS = [
+  { key: 'year', label: 'Year taken', order: 'desc' },
+  { key: 'format', label: 'Format' },
+  { key: 'orientation', label: 'Orientation' },
+  { key: 'resolution', label: 'Resolution' },
+  { key: 'size', label: 'File size' },
+  { key: 'duration', label: 'Video length' },
+  { key: 'camera', label: 'Camera' },
+];
+
+function renderFacets() {
+  const toggle = (set) => (id, on) => { set[on ? 'add' : 'delete'](id); load(true); };
+  const groups = state.fields.map((f) => facetGroup({
+    key: f.key, label: f.label, counts: state.facets[f.key], selected: state.tags, onToggle: toggle(state.tags),
+  })).filter(Boolean);
   $('facets').replaceChildren(...(groups.length ? groups
     : [el('p', { class: 'empty-note', text: 'No tags here yet. Tag a folder above, open an asset, or select several to tag them together.' })]));
-  $('clear-filters').hidden = !state.tags.size;
+  $('file-facets').replaceChildren(...FILE_FACETS.map((f) => facetGroup({
+    key: f.key, label: f.label, counts: state.fileFacets[f.key], selected: state.file,
+    order: state.fileOrder[f.key] || f.order, onToggle: toggle(state.file),
+  })).filter(Boolean));
+  $('clear-filters').hidden = !state.tags.size && !state.file.size && !state.range;
 }
 
 // ---------- selection & bulk editing ----------
@@ -685,11 +739,14 @@ function open(asset) {
     : el('img', { src: fileUrl, alt: asset.name }));
   $('d-name').textContent = asset.name;
   const rows = [
-    ['Type', asset.mimeType],
+    ['Format', `${asset.format || ''} (${asset.mimeType})`.replace(/^ \(/, '(')],
     ['Size', formatBytes(asset.size)],
     ['Dimensions', asset.width ? `${asset.width} × ${asset.height}` : '—'],
     ...(asset.kind === 'video' ? [['Duration', formatDuration(asset.durationMs) || '—']] : []),
     ['Folder', [asset.collection, asset.path].filter(Boolean).join(' / ')],
+    ...(asset.takenTime ? [['Taken', new Date(asset.takenTime).toLocaleString()]] : []),
+    ...(asset.camera ? [['Camera', asset.camera]] : []),
+    ['Added', asset.createdTime ? new Date(asset.createdTime).toLocaleString() : '—'],
     ['Modified', new Date(asset.modifiedTime).toLocaleString()],
   ];
   $('d-meta').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
@@ -765,7 +822,27 @@ $('suggested').addEventListener('change', (e) => { state.suggested = e.target.va
 $('copy-view').addEventListener('click', (e) => copyText(e.target, location.href));
 $('bulk-suggest').addEventListener('click', () => queueSuggestions({ ids: [...state.selected] }, state.selected.size));
 $('bulk-accept').addEventListener('click', () => accept({ ids: [...state.selected] }));
-$('clear-filters').addEventListener('click', () => { state.tags.clear(); load(true); });
+$('clear-filters').addEventListener('click', () => {
+  state.tags.clear();
+  state.file.clear();
+  state.range = state.from = state.to = '';
+  $('date-range').value = '';
+  $('date-custom').hidden = true;
+  load(true);
+});
+$('sort').addEventListener('change', (e) => { state.sort = e.target.value; load(true); });
+$('date-range').addEventListener('change', (e) => {
+  state.range = e.target.value;
+  $('date-custom').hidden = state.range !== 'custom';
+  load(true);
+});
+for (const id of ['date-from', 'date-to']) {
+  $(id).addEventListener('change', () => {
+    state.from = $('date-from').value;
+    state.to = $('date-to').value;
+    if (state.range === 'custom') load(true);
+  });
+}
 $('add-field').addEventListener('click', async () => {
   const label = prompt('Name of the new field (for example: Campaign, Photographer, Shoot):');
   if (!label?.trim()) return;

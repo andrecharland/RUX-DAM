@@ -261,3 +261,14 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
   background: var(--danger-bg); color: var(--danger); line-height: 1.5;
 }
 .storage-warning code { font-size: 12px; }
+
+/* File details filters */
+.side h2.subhead { margin-top: 20px; }
+.date-range, .date-custom input {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%;
+}
+.date-custom { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; margin-top: 6px; }
+.date-custom input { padding: 6px 4px; min-width: 0; }
+.empty-note.small { font-size: 12px; margin: 6px 0 0; }
+#file-facets .facet { margin-top: 14px; }

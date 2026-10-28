@@ -1,12 +1,13 @@
 'use strict';
 
 const { authedFetch } = require('./google');
+const { parseTakenTime } = require('./fileinfo');
 
 const API = 'https://www.googleapis.com/drive/v3';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
-const FIELDS = 'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,' +
-  'thumbnailLink,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis),' +
-  'webViewLink,parents)';
+const FIELDS = 'nextPageToken,files(id,name,mimeType,fileExtension,size,createdTime,modifiedTime,' +
+  'thumbnailLink,imageMediaMetadata(width,height,rotation,time,cameraMake,cameraModel),' +
+  'videoMediaMetadata(width,height,durationMillis),webViewLink,parents)';
 
 function isMedia(mimeType) {
   return mimeType.startsWith('image/') || mimeType.startsWith('video/');
@@ -23,14 +24,22 @@ function isJunk(name) {
 // everything inside it.
 function toAsset(file, folderPath, rootName, ancestors = []) {
   const meta = file.imageMediaMetadata || file.videoMediaMetadata || {};
+  // Drive reports the stored pixel size; a 90°/270° EXIF rotation swaps it as displayed.
+  const turned = file.imageMediaMetadata?.rotation % 2 === 1;
+  const image = file.imageMediaMetadata || {};
+  const camera = [image.cameraMake, image.cameraModel].filter(Boolean).join(' ').trim();
   return {
     id: file.id,
     name: file.name,
     mimeType: file.mimeType,
     kind: file.mimeType.startsWith('video/') ? 'video' : 'image',
+    fileExtension: (file.fileExtension || '').toLowerCase() || undefined,
     size: file.size ? Number(file.size) : null,
-    width: meta.width || null,
-    height: meta.height || null,
+    width: (turned ? meta.height : meta.width) || null,
+    height: (turned ? meta.width : meta.height) || null,
+    takenTime: parseTakenTime(image.time) || undefined,
+    // "Canon Canon EOS R5" -> "Canon EOS R5"
+    camera: camera.replace(/^(\S+) \1\b/i, '$1') || undefined,
     durationMs: file.videoMediaMetadata?.durationMillis
       ? Number(file.videoMediaMetadata.durationMillis) : null,
     createdTime: file.createdTime,

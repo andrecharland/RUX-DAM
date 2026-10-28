@@ -25,6 +25,15 @@
       <option value="">All assets</option>
       <option value="pending">✨ Suggestions to review</option>
     </select>
+    <select id="sort" aria-label="Sort">
+      <option value="">Recently modified</option>
+      <option value="taken">Newest taken</option>
+      <option value="taken-asc">Oldest taken</option>
+      <option value="added">Recently added</option>
+      <option value="name">Name A–Z</option>
+      <option value="size">Largest file</option>
+      <option value="duration">Longest video</option>
+    </select>
     <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
   </header>
 
@@ -44,6 +53,25 @@
           <button id="add-field" class="link" type="button">+ Add a field</button>
           <button id="edit-values" class="link" type="button">Edit field values</button>
         </div>
+        <h2 class="subhead">File details</h2>
+        <div class="facet">
+          <h3>Date taken</h3>
+          <select id="date-range" class="date-range" aria-label="Date taken">
+            <option value="">Any date</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="12m">Last 12 months</option>
+            <option value="year">This year</option>
+            <option value="custom">Custom range…</option>
+          </select>
+          <div id="date-custom" class="date-custom" hidden>
+            <input id="date-from" type="date" aria-label="From">
+            <span>to</span>
+            <input id="date-to" type="date" aria-label="To">
+          </div>
+          <p class="empty-note small">Uses the date the photo was taken when the camera recorded it, otherwise the date it was added to Drive.</p>
+        </div>
+        <div id="file-facets"></div>
       </section>
     </aside>
 

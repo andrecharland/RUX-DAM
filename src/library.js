@@ -3,6 +3,7 @@
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { SuggestionStore } = require('./suggest');
+const { fileFacets, assetDate, formatOf, SORTS } = require('./fileinfo');
 const crypto = require('node:crypto');
 
 function hashIndex(assets, folders) {
@@ -168,6 +169,7 @@ class Library {
     const tags = this.tags.resolve(asset);
     return {
       ...asset,
+      format: formatOf(asset),
       rights: this.rights.resolve(asset),
       tags,
       ownTags: this.tags.own(asset.id),
@@ -197,40 +199,68 @@ class Library {
   // Filters: free text (name, folder path, metadata values, Claude's description), type, folder
   // (including subfolders), rights status, and metadata values (`field:value`;
   // values in one field are OR-ed, different fields are AND-ed), and whether
-  // there are suggestions to review (`suggested: 'pending'`). Also returns
-  // value counts per field across the matches, for the filter sidebar.
-  search({ q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', offset = 0, limit = 100 } = {}) {
+  // there are suggestions to review (`suggested: 'pending'`). File properties
+  // filter the same way (`file: ['format:JPG', 'year:2025']`), plus a date range
+  // (`from`/`to`, YYYY-MM-DD, on the date taken, else the date added). Also
+  // returns value counts per field across the matches, for the filter sidebar.
+  search({
+    q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', file = [],
+    from = '', to = '', sort = 'modified', offset = 0, limit = 100,
+  } = {}) {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const tagFilters = parseTagFilters(tags);
+    const fileFilters = parseTagFilters(file);
     const matches = [];
     const facets = {};
+    const fileCounts = {};
     for (const a of this.assets) {
       if (kind && a.kind !== kind) continue;
       if (folder && !a.ancestors.some((f) => f.id === folder)) continue;
+      const day = assetDate(a).slice(0, 10);
+      if (from && (!day || day < from)) continue;
+      if (to && (!day || day > to)) continue;
+      const props = fileFacets(a);
       const view = this.view(a);
       if (rights && view.rights.status !== rights) continue;
       if (suggested === 'pending' && !view.suggestions?.count) continue;
-      let ok = true;
-      for (const [key, wanted] of tagFilters) {
-        if (!(view.tags[key] || []).some((t) => wanted.has(t.value.toLowerCase()))) { ok = false; break; }
-      }
-      if (!ok) continue;
       if (terms.length) {
         const values = Object.values(view.tags).flat().map((t) => t.value).join(' ');
         const description = view.suggestions?.description || '';
-        const haystack = `${a.name} ${a.collection} ${a.path} ${values} ${description}`.toLowerCase();
+        const haystack = (`${a.name} ${a.collection} ${a.path} ${values} ${description} ` +
+          `${props.format} ${props.year || ''} ${props.camera || ''} ${props.orientation || ''}`).toLowerCase();
         if (!terms.every((t) => haystack.includes(t))) continue;
       }
-      matches.push(view);
-      for (const [key, list] of Object.entries(view.tags)) {
-        const counts = (facets[key] ||= {});
-        for (const { value } of list) counts[value] = (counts[value] || 0) + 1;
+
+      // Tag and file filter groups this asset fails. Each group's counts ignore
+      // that group's own selection, so ticking "Portrait" still shows how many
+      // Landscape photos there are to add.
+      const failed = [];
+      for (const [key, wanted] of tagFilters) {
+        if (!(view.tags[key] || []).some((t) => wanted.has(t.value.toLowerCase()))) failed.push(`tag:${key}`);
       }
+      for (const [key, wanted] of fileFilters) {
+        if (!wanted.has(String(props[key] || '').toLowerCase())) failed.push(`file:${key}`);
+      }
+      if (failed.length > 1) continue;
+      const counts = (group) => !failed.length || failed[0] === group;
+      for (const [key, list] of Object.entries(view.tags)) {
+        if (!counts(`tag:${key}`)) continue;
+        const c = (facets[key] ||= {});
+        for (const { value } of list) c[value] = (c[value] || 0) + 1;
+      }
+      for (const [key, value] of Object.entries(props)) {
+        if (!counts(`file:${key}`)) continue;
+        const c = (fileCounts[key] ||= {});
+        c[value] = (c[value] || 0) + 1;
+      }
+      if (!failed.length) matches.push(view);
     }
+    if (SORTS[sort]) matches.sort(SORTS[sort]);
     return {
       total: matches.length,
       items: matches.slice(offset, offset + limit),
       facets,
+      fileFacets: fileCounts,
     };
   }
 
