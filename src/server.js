@@ -246,7 +246,7 @@ function createApp({ library, drive, password, suggester }) {
 
   app.get('/api/assets/:id/thumbnail', known, async (req, res, next) => {
     try {
-      const size = Math.min(Number(req.query.size) || 400, 1600);
+      const size = Math.min(Number(req.query.size) || 400, 2560);
       const driveRes = await drive.thumbnail(req.params.id, size);
       if (!driveRes || !driveRes.ok) return res.sendStatus(404);
       res.set('Cache-Control', 'private, max-age=3600');

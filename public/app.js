@@ -734,9 +734,15 @@ async function saveRights(status) {
 function open(asset) {
   state.current = asset;
   const fileUrl = `/api/assets/${asset.id}/file`;
+  // Photos show Drive's large preview (a JPG), which works for formats browsers
+  // can't display (HEIC, RAW, TIFF, PSD) and loads faster than the original.
+  // If there's no preview, fall back to the original file.
+  const preview = asset.hasThumbnail ? `/api/assets/${asset.id}/thumbnail?size=2048` : null;
+  const image = el('img', { src: preview || fileUrl, alt: asset.name });
+  image.addEventListener('error', () => { if (image.getAttribute('src') !== fileUrl) image.src = fileUrl; });
   $('stage').replaceChildren(asset.kind === 'video'
-    ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true })
-    : el('img', { src: fileUrl, alt: asset.name }));
+    ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview })
+    : image);
   $('d-name').textContent = asset.name;
   const rows = [
     ['Format', `${asset.format || ''} (${asset.mimeType})`.replace(/^ \(/, '(')],
