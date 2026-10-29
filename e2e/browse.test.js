@@ -116,6 +116,17 @@ describe('browsing and search', { skip: !playwright && 'playwright is not instal
     assert.deepStrictEqual(await color.locator('label:visible span:first-of-type').allTextContents(), ['Purple']);
   });
 
+  it('has keyboard shortcuts: / to search, ? to list them', async () => {
+    await fresh();
+    await page.keyboard.press('/');
+    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'q');
+    await page.locator('#q').blur();
+    await page.keyboard.press('?');
+    await page.waitForSelector('#shortcuts[open]');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#shortcuts').open);
+  });
+
   it('jumps to a year and resizes tiles with the slider', async () => {
     await fresh();
     await page.click('#scrubber button:has-text("2024")');

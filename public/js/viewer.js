@@ -1,4 +1,5 @@
 import { $, api, copyText, el, formatBytes, formatDuration, state, viewer } from './core.js';
+import { toast } from './toast.js';
 import { renderCurate } from './curation.js';
 import { afterEdit, load } from './grid.js';
 import { DPR, fillPx, thumbUrl, tileUrl, viewerUrl } from './previews.js';
@@ -73,17 +74,26 @@ export async function saveRights(status) {
   const asset = state.current;
   const targetId = $('r-target').value;
   const isFolder = targetId !== asset.id;
+  // The flag set on the file or folder itself before this change, for Undo.
+  const before = isFolder ? state.folders.get(targetId)?.rights
+    : asset.rights.source?.scope === 'file' ? asset.rights : null;
+  const url = `/api/rights/${encodeURIComponent(targetId)}`;
   $('r-msg').textContent = 'Saving…';
   try {
-    await api(`/api/rights/${encodeURIComponent(targetId)}`, {
-      status, note: status === 'inherit' ? '' : $('r-note').value,
-    });
+    await api(url, { status, note: status === 'inherit' ? '' : $('r-note').value });
   } catch (err) {
     $('r-msg').textContent = `Could not save: ${err.message}`;
     return;
   }
   await afterEdit();
   $('r-msg').textContent = isFolder ? 'Saved for the whole folder.' : 'Saved.';
+  const what = { restricted: 'Marked “Do not use”', cleared: 'Marked cleared to use', inherit: 'Removed the usage flag' }[status];
+  toast(`${what}${isFolder ? ' for the whole folder' : ''}`, {
+    undo: async () => {
+      await api(url, before ? { status: before.status, note: before.note || '' } : { status: 'inherit' });
+      await afterEdit();
+    },
+  });
 }
 
 // Videos play from the file itself when the browser can decode it; otherwise

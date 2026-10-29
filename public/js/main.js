@@ -52,7 +52,21 @@ $('bulk-clear').addEventListener('click', () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !viewer.open && state.selected.size) $('bulk-clear').click();
+  // "/" searches and "?" lists the shortcuts, unless typing or in a dialog.
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (document.querySelector('dialog[open]')) return;
+  if (e.key === '/') {
+    e.preventDefault();
+    $('q').focus();
+  } else if (e.key === '?') {
+    $('shortcuts').showModal();
+  }
 });
+$('shortcuts-open').addEventListener('click', () => {
+  $('user-menu').open = false;
+  $('shortcuts').showModal();
+});
+$('shortcuts-close').addEventListener('click', () => $('shortcuts').close());
 
 $('close').addEventListener('click', () => viewer.close());
 
@@ -66,8 +80,11 @@ $('z-100').addEventListener('click', () => setZoom(1));
 
 $('z-200').addEventListener('click', () => setZoom(2));
 
-viewer.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, textarea, select, video, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+// Viewer keys work wherever focus is while the viewer is open (and no other
+// dialog is on top), e.g. after clicking Undo in a confirmation.
+document.addEventListener('keydown', (e) => {
+  if (!viewer.open || document.querySelectorAll('dialog[open]').length > 1) return;
+  if (e.target.closest?.('input, textarea, select, video, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
   else if (e.key === 'z' || e.key === 'Z') setZoom(state.zoom ? 0 : 1);

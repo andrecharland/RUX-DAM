@@ -170,6 +170,13 @@ export async function watchSync() {
 // in flight, whose response is then dropped; loading more waits its turn.
 export let loadSeq = 0;
 
+// Grey placeholder tiles in a few shapes while the first page loads.
+const SKELETON_SHAPES = [1.5, 0.67, 1.33, 1.78, 1, 0.75, 1.5, 1.2];
+function skeleton() {
+  return el('div', { class: 'rows skeleton', 'aria-hidden': 'true' },
+    Array.from({ length: 18 }, (_, i) => el('div', { class: 'card ghost', style: `--ar: ${SKELETON_SHAPES[i % SKELETON_SHAPES.length]}` })));
+}
+
 export async function load(reset = false) {
   if (state.loading && !reset) return;
   if (!reset && state.offset >= state.total && state.offset > 0) return;
@@ -178,7 +185,8 @@ export async function load(reset = false) {
   if (reset) {
     state.offset = 0;
     state.items.clear();
-    grid.replaceChildren();
+    grid.replaceChildren(skeleton());
+    $('meta').textContent = 'Loading…';
     writeUrl();
     renderChips();
     renderFolderCards();
@@ -191,6 +199,7 @@ export async function load(reset = false) {
     state.months = data.months;
     state.similarMode = data.similarMode || '';
     for (const a of data.items) state.items.set(a.id, a);
+    grid.querySelector('.skeleton')?.remove();
     appendCards(data.items);
     state.facets = data.facets;
     state.fileFacets = data.fileFacets || {};

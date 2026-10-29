@@ -70,6 +70,10 @@ test('ratings, personal favorites and team collections', async () => {
     const listed = (await get('/api/collections')).collections;
     assert.deepStrictEqual(listed.map((x) => [x.name, x.description, x.count, x.createdBy]), [['Spring launch', 'Hero shots', 2, 'ana@rux.life']]);
     assert.deepStrictEqual((await get('/api/assets/a2')).collections, [{ id: c.id, name: 'Spring launch' }]);
+    await post(`/api/collections/${c.id}`, { order: ['a2', 'a3'] });
+    assert.deepStrictEqual(await ids(`collection=${c.id}`), ['a2', 'a3'], 'reordered');
+    await post(`/api/collections/${c.id}`, { order: ['nope', 'a3'] });
+    assert.deepStrictEqual(await ids(`collection=${c.id}`), ['a3', 'a2'], 'unknown ids ignored, the rest keep their place after');
     await post(`/api/collections/${c.id}`, { name: 'Spring 27' });
     assert.strictEqual((await get('/api/collections')).collections[0].name, 'Spring 27');
     assert.strictEqual((await post('/api/collections/nope', { name: 'x' })).status, 404);

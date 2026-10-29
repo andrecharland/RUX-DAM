@@ -104,8 +104,10 @@ class CurationStore {
     return this.collection(c.id);
   }
 
-  // { name?, description?, add?: [ids], remove?: [ids] }; added assets go last.
-  async updateCollection(id, { name, description, add = [], remove = [] }) {
+  // { name?, description?, add?: [ids], remove?: [ids], order?: [ids] }; added
+  // assets go last; `order` rearranges the items it lists into that order
+  // (items it leaves out keep their place after them).
+  async updateCollection(id, { name, description, add = [], remove = [], order }) {
     if (!this.collection(id)) return null;
     if (name !== undefined && !String(name).trim()) throw new RangeError('A collection needs a name');
     await this.store.update(({ collections }) => {
@@ -116,7 +118,12 @@ class CurationStore {
       const drop = new Set(remove);
       const items = c.items.filter((x) => !drop.has(x));
       for (const x of add) if (!items.includes(x)) items.push(x);
-      c.items = items.slice(0, MAX_ITEMS);
+      if (Array.isArray(order)) {
+        const listed = [...new Set(order.map(String))].filter((x) => items.includes(x));
+        c.items = [...listed, ...items.filter((x) => !listed.includes(x))].slice(0, MAX_ITEMS);
+      } else {
+        c.items = items.slice(0, MAX_ITEMS);
+      }
       c.updatedAt = new Date().toISOString();
     });
     return this.collection(id);

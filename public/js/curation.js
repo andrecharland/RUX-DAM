@@ -1,4 +1,5 @@
 import { $, api, copyText, el, plural, state, viewer } from './core.js';
+import { restoreEach, toast } from './toast.js';
 import { renderCrumbs, renderFolderPanel, renderTree, selectFolder } from './folders.js';
 import { load, reloadInPlace } from './grid.js';
 import { renderBulk, setSelected } from './selection.js';
@@ -109,8 +110,28 @@ export async function curate(url, body) {
   renderBulk();
 }
 
-export const rate = (ids, rating) => curate('/api/rate', { ids, rating });
-export const favorite = (ids, on) => curate('/api/favorite', { ids, on });
+const known = (id) => state.items.get(id) || (state.current?.id === id ? state.current : null);
+const count = (ids, word = 'photo') => (ids.length === 1 ? `1 ${word}` : plural(ids.length, word));
+
+// Ratings and favorites can be undone from the confirmation, each item back
+// to what it had before.
+export async function rate(ids, rating, { quiet = false } = {}) {
+  const before = ids.map((id) => [id, known(id)?.rating || 0]);
+  await curate('/api/rate', { ids, rating });
+  if (quiet) return;
+  toast(rating ? `Rated ${count(ids)} ${'★'.repeat(rating)}` : `Cleared the rating on ${count(ids)}`, {
+    undo: () => restoreEach(before, (group, value) => rate(group, value, { quiet: true })),
+  });
+}
+
+export async function favorite(ids, on, { quiet = false } = {}) {
+  const before = ids.map((id) => [id, Boolean(known(id)?.favorite)]);
+  await curate('/api/favorite', { ids, on });
+  if (quiet) return;
+  toast(on ? `Added ${count(ids)} to your favorites` : `Removed ${count(ids)} from your favorites`, {
+    undo: () => restoreEach(before, (group, value) => favorite(group, value, { quiet: true })),
+  });
+}
 
 // Stars, favorite and collections for the open asset.
 export function renderCurate(asset) {
@@ -154,8 +175,14 @@ export function renderCollectList() {
     box.addEventListener('change', async () => {
       box.disabled = true;
       try {
-        await curate(`/api/collections/${encodeURIComponent(c.id)}`, box.checked ? { add: collectIds } : { remove: collectIds });
+        const ids = collectIds;
+        const was = ids.filter((id) => c.items.includes(id));
+        const url = `/api/collections/${encodeURIComponent(c.id)}`;
+        await curate(url, box.checked ? { add: ids } : { remove: ids });
         $('collect-msg').textContent = box.checked ? `Added to “${c.name}”.` : `Removed from “${c.name}”.`;
+        toast(box.checked ? `Added ${count(ids)} to “${c.name}”` : `Removed ${count(ids)} from “${c.name}”`, {
+          undo: () => curate(url, box.checked ? { remove: ids.filter((id) => !was.includes(id)) } : { add: was }),
+        });
       } catch (err) {
         $('collect-msg').textContent = err.message;
       }
@@ -197,9 +224,19 @@ $('bulk-collect').addEventListener('click', () => openCollect([...state.selected
 
 $('bulk-uncollect').addEventListener('click', async () => {
   const ids = [...state.selected];
-  await curate(`/api/collections/${encodeURIComponent(state.collection)}`, { remove: ids });
+  const c = state.collections.find((x) => x.id === state.collection);
+  const url = `/api/collections/${encodeURIComponent(state.collection)}`;
+  await curate(url, { remove: ids });
   for (const id of ids) setSelected(id, false);
   await load(true);
   renderBulk();
+  // Undo puts them back where they were in the collection's order (the server
+  // adds them, then applies the old order, in one step).
+  toast(`Removed ${count(ids)} from “${c?.name || 'the collection'}”`, {
+    undo: async () => {
+      await api(url, { add: ids, order: c?.items || [] });
+      await Promise.all([load(true), loadCollections()]);
+    },
+  });
 });
 

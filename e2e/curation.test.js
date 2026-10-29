@@ -26,6 +26,12 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.waitForSelector('#viewer[open]');
     await page.keyboard.press('4');
     await page.waitForFunction(() => document.querySelectorAll('#d-stars button.on').length === 4);
+    await page.waitForSelector('#viewer #toast:has-text("Rated 1 photo ★★★★")');
+    // Undo puts the rating back.
+    await page.click('#toast button:has-text("Undo")');
+    await page.waitForFunction(() => !document.querySelectorAll('#d-stars button.on').length);
+    await page.keyboard.press('4');
+    await page.waitForFunction(() => document.querySelectorAll('#d-stars button.on').length === 4);
     await page.keyboard.press('f');
     await page.waitForFunction(() => document.querySelector('#d-fav').getAttribute('aria-pressed') === 'true');
     await page.keyboard.press('Escape');
@@ -56,11 +62,16 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
   it('opens a collection in the order items were added, and removes from it', async () => {
     const order = await Promise.all([0, 3, 1, 2].map((n) => card(n).getAttribute('data-id')));
     await page.click('#collections button:has-text("Spring launch")');
-    await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('4 '));
-    assert.deepStrictEqual(await page.locator('#grid .card').evaluateAll((cs) => cs.map((c) => c.dataset.id)), order);
+    await page.waitForFunction((ids) => [...document.querySelectorAll('#grid .card')].map((c) => c.dataset.id).join() === ids, order.join());
     assert.strictEqual(await page.locator('.group-head').count(), 0, 'no month headings in a collection');
     assert.match(await page.textContent('#crumbs'), /Spring launch/);
     assert.match(await page.textContent('#collection-panel'), /made by ana/);
+    await card(0).locator('.pick').click();
+    await page.click('#bulk-uncollect');
+    await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('3 '));
+    // Undo puts it back in its place.
+    await page.click('#toast button:has-text("Undo")');
+    await page.waitForFunction((ids) => [...document.querySelectorAll('#grid .card')].map((c) => c.dataset.id).join() === ids, order.join());
     await card(0).locator('.pick').click();
     await page.click('#bulk-uncollect');
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('3 '));
