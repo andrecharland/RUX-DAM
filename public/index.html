@@ -85,11 +85,21 @@
       </div>
       <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
       <section id="folder-tags" class="folder-tags" hidden>
-        <div id="folder-label" class="label-row"></div>
-        <p class="hint">Tags on this folder apply to all <strong id="folder-count"></strong> assets inside it.</p>
+        <div class="ft-head">
+          <div id="folder-label" class="label-row"></div>
+          <div class="ft-actions">
+            <button id="folder-add-tag" class="btn ghost small" type="button">+ Add tag</button>
+            <details id="folder-suggest-menu" class="menu" hidden>
+              <summary class="btn ghost small ai-btn">✨ Suggest tags</summary>
+              <div class="menu-pop">
+                <button id="folder-suggest-shoot" type="button"><strong>Tags for the shoot</strong><span id="folder-suggest-shoot-note"></span></button>
+                <button id="folder-suggest" type="button"><strong>Tags for each photo</strong><span id="folder-suggest-note"></span></button>
+              </div>
+            </details>
+          </div>
+        </div>
         <div id="folder-editor"></div>
         <div id="folder-ai" class="folder-ai"></div>
-        <button id="folder-suggest" class="btn ghost ai-btn" type="button" hidden></button>
       </section>
       <section id="folder-cards" class="folder-cards" aria-label="Folders" hidden></section>
       <div class="toolbar">

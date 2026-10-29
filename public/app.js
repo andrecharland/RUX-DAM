@@ -148,7 +148,9 @@ async function loadFields() {
 // Builds a metadata editor. `tags` is { field: [{ value, from }] }; values whose
 // `from.scope` is 'folder' are inherited and shown read-only. `apply({ add, remove })`
 // performs the change. With `bulk`, only the add/remove row is shown.
-function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No metadata yet.' }) {
+// `collapsible`: the add row can be shown with root.openAdd() and hidden with its
+// Done button (calling root.onclose); `collapsed` starts it hidden.
+function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No metadata yet.', collapsible = false, collapsed = false }) {
   const root = el('div', { class: 'editor' });
   const msg = el('p', { class: 'msg', role: 'status' });
 
@@ -190,11 +192,14 @@ function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No metadata ye
     run({ [op]: { [select.value]: [value] } }, () => { input.value = ''; input.focus(); });
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit('add'); });
-  root.append(el('div', { class: 'add-row' }, [
+  const addRow = el('div', { class: 'add-row', hidden: collapsed }, [
     select, input,
     el('button', { class: 'btn', type: 'button', text: 'Add', onclick: () => submit('add') }),
     bulk && el('button', { class: 'btn ghost', type: 'button', text: 'Remove', onclick: () => submit('remove') }),
-  ].filter(Boolean)), msg);
+    collapsible && el('button', { class: 'btn ghost', type: 'button', text: 'Done', onclick: () => { addRow.hidden = true; root.onclose?.(); } }),
+  ].filter(Boolean));
+  root.append(addRow, msg);
+  root.openAdd = () => { addRow.hidden = false; select.focus(); };
   return root;
 }
 
@@ -278,53 +283,92 @@ function renderCrumbs() {
   $('crumbs').replaceChildren(...parts);
 }
 
-function renderFolderPanel() {
+// The open folder: its label, its tags (which apply to everything inside), and
+// Claude's shoot suggestions when there are some to review. Adding tags and
+// asking Claude live behind the two buttons in the header.
+const folderUi = { addOpen: null };
+
+function renderFolderPanel({ background = false } = {}) {
   const folder = state.folders.get(state.folder);
   $('folder-tags').hidden = !folder;
   if (!folder) return;
-  $('folder-count').textContent = folder.count.toLocaleString();
+  const n = folder.count.toLocaleString();
   $('folder-label').replaceChildren(...labelRow(folder, () => openLabelEditor(folder, {
     kind: 'folder', tags: folderTags(folder),
   })));
-  // Effective tags: inherited from enclosing folders, then this folder's own.
-  const tags = {};
-  const add = (own, from) => {
-    for (const [key, values] of Object.entries(own || {})) {
-      for (const value of values) {
-        const list = (tags[key] ||= []);
-        const hit = list.find((t) => t.value.toLowerCase() === value.toLowerCase());
-        if (hit) hit.from = from; else list.push({ value, from });
+  // Background refreshes (AI progress) don't redraw the editor under someone typing in it.
+  const editorBox = $('folder-editor');
+  const typing = editorBox.contains(document.activeElement);
+  if (!(background && typing)) {
+    // Effective tags: inherited from enclosing folders, then this folder's own.
+    const tags = {};
+    const add = (own, from) => {
+      for (const [key, values] of Object.entries(own || {})) {
+        for (const value of values) {
+          const list = (tags[key] ||= []);
+          const hit = list.find((t) => t.value.toLowerCase() === value.toLowerCase());
+          if (hit) hit.from = from; else list.push({ value, from });
+        }
       }
-    }
+    };
+    for (const a of folder.ancestors) add(state.folders.get(a.id)?.tags, { scope: 'folder', id: a.id, name: a.name });
+    add(folder.tags, { scope: 'file' });
+    const editor = tagEditor({
+      tags, apply: applyTo([folder.id]), collapsible: true, collapsed: folderUi.addOpen !== folder.id,
+      emptyText: `No folder tags yet. Tags added here apply to all ${n} assets inside.`,
+    });
+    editor.onclose = () => { folderUi.addOpen = null; };
+    editorBox.replaceChildren(editor);
+    if (typing && folderUi.addOpen === folder.id) editor.querySelector('.add-row input').focus();
+  }
+  $('folder-add-tag').title = `Tags on this folder apply to all ${n} assets inside it`;
+  $('folder-add-tag').onclick = () => {
+    folderUi.addOpen = folder.id;
+    editorBox.firstElementChild?.openAdd();
   };
-  for (const a of folder.ancestors) add(state.folders.get(a.id)?.tags, { scope: 'folder', id: a.id, name: a.name });
-  add(folder.tags, { scope: 'file' });
-  $('folder-editor').replaceChildren(tagEditor({
-    tags, apply: applyTo([folder.id]), emptyText: 'No tags on this folder yet.',
-  }));
-  // Shoot-level suggestions (one request from a few samples), then per-photo ones.
+
+  // Shoot-level suggestions to review (one request from a few samples).
   const folderAi = $('folder-ai');
-  if (folder.suggestions || state.ai.enabled) {
+  if (folder.suggestions) {
     folderAi.replaceChildren(suggestionBox({
       id: folder.id,
       s: folder.suggestions,
       title: '✨ Shoot tags suggested by Claude',
-      runLabel: `Suggest shoot tags from ${Math.min(6, folder.count)} sample photos`,
-      run: async () => {
-        await api(`/api/suggest/folder/${encodeURIComponent(folder.id)}/run`, {});
-        await loadFolders();
-        refreshAi();
-      },
+      run: runShootSuggestions(folder),
     }));
   } else {
     folderAi.replaceChildren();
   }
-  const suggest = $('folder-suggest');
-  suggest.hidden = !state.ai.enabled;
-  suggest.textContent = `✨ Suggest tags for each of the ${folder.count.toLocaleString()} photos` +
-    (folder.count > (state.ai.batchMin ?? 50) ? ' (batch, half price)' : '');
-  suggest.onclick = () => queueSuggestions({ folder: folder.id }, folder.count);
+
+  const menu = $('folder-suggest-menu');
+  menu.hidden = !state.ai.enabled;
+  $('folder-suggest-shoot-note').textContent = `Claude looks at ${Math.min(6, folder.count)} sample photos`;
+  $('folder-suggest-shoot').onclick = async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    $('folder-suggest-shoot-note').textContent = 'Asking Claude…';
+    try {
+      await runShootSuggestions(folder)();
+      menu.open = false;
+    } catch (err) {
+      $('folder-suggest-shoot-note').textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+  $('folder-suggest-note').textContent = `${n} photos` +
+    (folder.count > (state.ai.batchMin ?? 50) ? ' · batch, half price' : '');
+  $('folder-suggest').onclick = () => {
+    menu.open = false;
+    queueSuggestions({ folder: folder.id }, folder.count);
+  };
 }
+
+const runShootSuggestions = (folder) => async () => {
+  await api(`/api/suggest/folder/${encodeURIComponent(folder.id)}/run`, {});
+  await loadFolders();
+  refreshAi();
+};
 
 // ---------- grid ----------
 
@@ -821,7 +865,7 @@ async function refreshAi() {
     if (active && ++refreshAi.ticks % 4 === 0) reloadInPlace();
     refreshAi.timer = setTimeout(refreshAi, active ? 3000 : 30000);
   } else if (state.aiWasBusy) {
-    bar.hidden = false;
+    bar.hidden = !(ai.done || ai.failed);
     bar.replaceChildren(
       el('span', { text: `✨ Done: ${ai.done} suggested${ai.failed ? `, ${ai.failed} failed (${ai.lastError})` : ''}${cost}.` }),
       el('button', { type: 'button', class: 'link', text: 'Review suggestions', onclick: () => {
@@ -836,7 +880,7 @@ async function refreshAi() {
     loadFolders();
   }
   state.aiWasBusy = busy;
-  renderFolderPanel();
+  renderFolderPanel({ background: true });
   renderBulk();
 }
 refreshAi.ticks = 0;
@@ -1575,3 +1619,12 @@ async function showUser() {
     }
   }
 })();
+
+// Close the folder's Suggest menu on a click elsewhere or Escape.
+document.addEventListener('click', (e) => {
+  const menu = $('folder-suggest-menu');
+  if (menu.open && !menu.contains(e.target)) menu.open = false;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') $('folder-suggest-menu').open = false;
+});
