@@ -223,9 +223,10 @@ $('sync').addEventListener('click', async (e) => {
   }
 });
 
+// Starts loading the next page about two screens before the end.
 new IntersectionObserver((entries) => {
   if (entries[0].isIntersecting && state.offset < state.total) load();
-}, { rootMargin: '600px' }).observe($('sentinel'));
+}, { rootMargin: '200% 0px' }).observe($('sentinel'));
 
 export async function showUser() {
   const user = await api('/api/me').catch(() => null);

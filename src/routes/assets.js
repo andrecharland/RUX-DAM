@@ -77,6 +77,15 @@ function assetRoutes({ library, similarity, visualLimit }) {
     });
   });
 
+  // Average colors worked out by the browser from loaded previews: { colors: { id: '#rrggbb' } }.
+  router.post('/api/colors', express.json({ limit: '100kb' }), (req, res) => {
+    const colors = req.body?.colors;
+    if (!colors || typeof colors !== 'object' || Object.keys(colors).length > 500) {
+      return res.status(400).json({ error: 'colors must be an object of up to 500 ids' });
+    }
+    res.json({ added: library.colors.add(colors, (id) => library.has(id)) });
+  });
+
   router.get('/api/folders', (req, res) => res.json(library.folderList()));
 
   router.get('/api/status', (req, res) => res.json({

@@ -36,6 +36,18 @@ describe('browsing and search', { skip: !playwright && 'playwright is not instal
     assert.deepStrictEqual(page.errors, []);
   });
 
+  it('records tile colors and shows them behind tiles on the next visit', async () => {
+    await fresh();
+    await page.waitForFunction(() => document.querySelectorAll('#grid img').length > 5);
+    const id = await page.locator('#grid .card').first().getAttribute('data-id');
+    await page.waitForFunction(() => document.querySelector('#grid img').naturalWidth > 0);
+    for (let i = 0; i < 50 && !app.library.colors.get(id); i++) await page.waitForTimeout(200);
+    assert.match(app.library.colors.get(id) || '', /^#[0-9a-f]{6}$/);
+    await page.reload();
+    await page.waitForSelector('#grid .card');
+    assert.match(await page.locator('#grid .card').first().getAttribute('style'), /background-color: #[0-9a-f]{6}/);
+  });
+
   it('switches folder cards to the folder tree and remembers it', async () => {
     await fresh();
     await page.click('.fview button:has-text("By folder")');

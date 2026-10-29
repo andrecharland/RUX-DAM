@@ -91,3 +91,15 @@ test('previews are kept in the bucket, so a restart still finds them', async (t)
   assert.strictEqual(again.type, 'image/jpeg');
   assert.strictEqual(loads, 1, 'Drive asked once');
 });
+
+test('average colors from browsers are kept, first one wins', async () => {
+  const { ColorStore } = require('../src/colors');
+  const colors = new ColorStore({ log: quiet });
+  assert.strictEqual(colors.add({ a: '#AABBCC', b: 'red', c: '#123456' }, (id) => id !== 'c'), 1);
+  assert.strictEqual(colors.get('a'), '#aabbcc');
+  assert.strictEqual(colors.get('b'), null, 'not a hex color');
+  assert.strictEqual(colors.get('c'), null, 'unknown asset');
+  assert.strictEqual(colors.add({ a: '#000000' }), 0, 'first color is kept');
+  assert.strictEqual(colors.get('__proto__'), null);
+  await colors.flush();
+});

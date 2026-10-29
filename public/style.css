@@ -432,6 +432,9 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .label-row .drive-name { color: var(--muted); font-size: 12px; width: 100%; word-break: break-word; }
 
 .group { scroll-margin-top: 63px; }
+/* Month groups far off screen skip layout and painting until scrolled near. */
+.group { content-visibility: auto; contain-intrinsic-size: auto 600px; }
+
 
 /* Curation: stars, favorites, collections */
 .curate { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }

@@ -2,7 +2,7 @@ import { $, PAGE, api, el, formatDuration, grid, state, viewer } from './core.js
 import { renderCurate } from './curation.js';
 import { renderChips, renderFacets } from './filters.js';
 import { loadFolders, renderFolderCards } from './folders.js';
-import { aspectOf, tileUrl } from './previews.js';
+import { aspectOf, sampleColor, tileUrl } from './previews.js';
 import { renderBulk } from './selection.js';
 import { renderSuggestions } from './suggest.js';
 import { loadFields } from './tags.js';
@@ -22,11 +22,12 @@ export function card(asset) {
   const where = [asset.collection, asset.path].filter(Boolean).join(' / ');
   return el('div', {
     class: ['card', restricted && 'restricted', selected && 'selected'].filter(Boolean).join(' '),
-    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset), style: `--ar: ${ar.toFixed(3)}`,
+    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset),
+    style: `--ar: ${ar.toFixed(3)}${asset.color ? `; background-color: ${asset.color}` : ''}`,
   }, [
     el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected }),
     asset.hasThumbnail
-      ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '' })
+      ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '', onload: (e) => sampleColor(asset, e.target) })
       : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
     restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
     asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',

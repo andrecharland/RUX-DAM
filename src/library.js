@@ -4,6 +4,7 @@ const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { SuggestionStore } = require('./suggest');
 const { CurationStore } = require('./curation');
+const { ColorStore } = require('./colors');
 const { fileFacets, assetDate, formatOf, SORTS } = require('./fileinfo');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
@@ -39,6 +40,7 @@ class Library extends EventEmitter {
     tags = new TagStore(),
     suggestions = new SuggestionStore(),
     curation = new CurationStore(),
+    colors = new ColorStore(),
     index = null,
     log = console,
   } = {}) {
@@ -50,6 +52,7 @@ class Library extends EventEmitter {
     this.tags = tags;
     this.suggestions = suggestions;
     this.curation = curation;
+    this.colors = colors;
     this.index = index;
     this.log = log;
     this.assets = [];
@@ -74,7 +77,7 @@ class Library extends EventEmitter {
   }
 
   async loadStores(errors) {
-    for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions], ['curation', this.curation]]) {
+    for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions], ['curation', this.curation], ['colors', this.colors]]) {
       try {
         await store.load();
       } catch (err) {
@@ -182,6 +185,7 @@ class Library extends EventEmitter {
       ownTags: this.tags.own(asset.id),
       suggestions: this.suggestions.resolve(asset.id, tags),
       rating: this.curation.rating(asset.id),
+      color: this.colors.get(asset.id),
     };
   }
 

@@ -10,6 +10,7 @@ const { Library } = require('./library');
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { CurationStore } = require('./curation');
+const { ColorStore } = require('./colors');
 const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 const { JsonStore } = require('./store');
 const { googleSignIn } = require('./auth');
@@ -70,6 +71,7 @@ function start(env = process.env) {
     tags: new TagStore({ auth, bucket }),
     suggestions: new SuggestionStore({ auth, bucket }),
     curation: new CurationStore({ auth, bucket }),
+    colors: new ColorStore({ auth, bucket }),
     // The last synced asset list, so restarts don't start from an empty grid.
     index: bucket ? new JsonStore({ auth, bucket, object: 'index.json', empty: () => ({ assets: [], folders: [] }) }) : null,
   });
