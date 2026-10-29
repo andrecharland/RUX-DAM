@@ -286,15 +286,31 @@ function renderCrumbs() {
 // The open folder: its label, its tags (which apply to everything inside), and
 // Claude's shoot suggestions when there are some to review. Adding tags and
 // asking Claude live behind the two buttons in the header.
-const folderUi = { addOpen: null };
+const folderUi = { addOpen: null, open: false };
+try { folderUi.open = localStorage.getItem('rux-dam-folder-details') === 'open'; } catch {}
+
+function setFolderDetails(open) {
+  folderUi.open = open;
+  try { localStorage.setItem('rux-dam-folder-details', open ? 'open' : 'closed'); } catch {}
+  $('ft-body').hidden = !open;
+  $('ft-toggle').setAttribute('aria-expanded', String(open));
+}
 
 function renderFolderPanel({ background = false } = {}) {
   const folder = state.folders.get(state.folder);
   $('folder-tags').hidden = !folder;
   if (!folder) return;
   const n = folder.count.toLocaleString();
+  setFolderDetails(folderUi.open);
+  const ownTags = Object.values(folder.tags || {}).flat().length;
+  const toReview = folder.suggestions?.count || 0;
+  $('ft-summary').replaceChildren(...[
+    folder.label ? labelText(folder.label) : '',
+    ownTags ? `${ownTags} tag${ownTags === 1 ? '' : 's'}` : 'no tags',
+  ].filter(Boolean).map((t) => el('span', { text: t })),
+  toReview ? el('span', { class: 'ai-note', text: `✨ ${toReview} to review` }) : '');
   $('folder-label').replaceChildren(...labelRow(folder, () => openLabelEditor(folder, {
-    kind: 'folder', tags: folderTags(folder),
+    kind: 'folder', tags: folderTags(folder), media: folder.videos > folder.photos ? 'Video' : 'Photo',
   })));
   // Background refreshes (AI progress) don't redraw the editor under someone typing in it.
   const editorBox = $('folder-editor');
@@ -323,6 +339,7 @@ function renderFolderPanel({ background = false } = {}) {
   }
   $('folder-add-tag').title = `Tags on this folder apply to all ${n} assets inside it`;
   $('folder-add-tag').onclick = () => {
+    setFolderDetails(true);
     folderUi.addOpen = folder.id;
     editorBox.firstElementChild?.openAdd();
   };
@@ -350,6 +367,7 @@ function renderFolderPanel({ background = false } = {}) {
     try {
       await runShootSuggestions(folder)();
       menu.open = false;
+      setFolderDetails(true);
     } catch (err) {
       $('folder-suggest-shoot-note').textContent = err.message;
     } finally {
@@ -970,7 +988,8 @@ function renderSuggestions(asset) {
 
 // ---------- labels (RUX naming convention) ----------
 
-const displayName = (item) => item.label?.name || item.name;
+// Labelled items show their label in plain words (downloads still use the RUX_ name).
+const displayName = (item) => (item.label ? labelText(item.label) : item.name);
 // Creator(s) from the asset's own or inherited Creator tag.
 const creatorOf = (asset) => (asset.tags?.creator || []).map((t) => t.value).join(', ');
 
@@ -987,15 +1006,25 @@ function folderTags(folder) {
 
 // The label line under a name: the label (or "No label") and an edit button.
 // `showName: false` when the label is already the heading above it.
+// A label's parts in plain words, e.g. "Gear Box 70L · Proof · Reels 9x16 · by Cal · Jun 8, 2026 · version 1".
+function labelText(label) {
+  const p = label?.parts;
+  if (!p) return label?.name || '';
+  const date = p.date ? new Date(`${p.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  return [p.product, p.concept, [p.format, p.aspect].filter(Boolean).join(' '), p.creator && `by ${p.creator}`, date,
+    p.version && `version ${p.version}`].filter(Boolean).join(' · ');
+}
+
 function labelRow(item, onEdit, { showName = true } = {}) {
   return item.label
     ? [
-      showName ? el('code', { text: item.label.name, title: 'Label' }) : '',
+      showName ? el('span', { class: 'label-plain', text: labelText(item.label) }) : '',
+      el('code', { text: item.label.name, title: 'Label (RUX naming convention)' }),
       el('button', { type: 'button', class: 'link', text: 'Edit label', onclick: onEdit }),
       el('span', { class: 'drive-name', text: `Drive name: ${item.name}` }),
     ]
     : [
-      el('span', { class: 'hint', text: 'No label' }),
+      el('span', { class: 'hint', text: 'No label yet. A label names this with the RUX naming convention.' }),
       el('button', { type: 'button', class: 'link', text: 'Add label', onclick: onEdit }),
     ];
 }
@@ -1004,6 +1033,7 @@ function renderViewerLabel(asset) {
   $('d-name').textContent = displayName(asset);
   $('d-label').replaceChildren(...labelRow(asset, () => openLabelEditor(asset, {
     kind: 'file', tags: asset.tags, width: asset.width, height: asset.height, date: asset.takenTime || asset.createdTime,
+    media: asset.kind === 'video' ? 'Video' : 'Photo',
   }), { showName: false }));
 }
 
@@ -1012,7 +1042,7 @@ const labelEdit = { item: null };
 
 // Starting values: the current label; else the Drive name if it already follows
 // the convention; else the item's tags, its pixel aspect and its date.
-function labelDefaults(item, { tags = {}, width, height, date } = {}) {
+function labelDefaults(item, { tags = {}, width, height, date, media } = {}) {
   if (item.label) return { ...item.label.parts };
   const parsed = RuxNaming.parse(item.name);
   const fromVocab = (key, written, toToken) => state.fields.find((f) => f.key === key)?.values
@@ -1030,7 +1060,7 @@ function labelDefaults(item, { tags = {}, width, height, date } = {}) {
   return {
     product: first('product'),
     concept: first('concept'),
-    format: first('format'),
+    format: first('format') || media || '',
     aspect: first('aspect') || RuxNaming.aspectOf(width, height),
     creator: first('creator'),
     date: (date || new Date().toISOString()).slice(0, 10),
@@ -1052,8 +1082,8 @@ function openLabelEditor(item, context) {
   const values = labelDefaults(item, context);
   for (const k of LABEL_INPUTS) $(`lb-${k}`).value = values[k] ?? '';
   $('lb-for').textContent = `${context.kind === 'folder' ? 'Folder' : 'File'} in Drive: ${item.name}. ` +
-    'The label is shown in place of the Drive name and nothing in Drive changes. Its parts are added as tags' +
-    (context.kind === 'folder' ? ', so everything in the folder gets them.' : '.');
+    'The label is shown in place of the Drive name and nothing in Drive changes. Every part is optional; ' +
+    'the ones you fill in are added as tags' + (context.kind === 'folder' ? ', so everything in the folder gets them.' : '.');
   $('lb-remove').hidden = !item.label;
   updateLabelPreview();
   $('label-dialog').showModal();
@@ -1619,6 +1649,8 @@ async function showUser() {
     }
   }
 })();
+
+$('ft-toggle').addEventListener('click', () => setFolderDetails(!folderUi.open));
 
 // Close the folder's Suggest menu on a click elsewhere or Escape.
 document.addEventListener('click', (e) => {

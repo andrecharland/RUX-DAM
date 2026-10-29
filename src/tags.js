@@ -15,7 +15,7 @@ const DEFAULT_FIELDS = [
   { key: 'tags', label: 'Tags' },
   // From the RUX Paid Social Creative Playbook (also the parts of a label).
   { key: 'concept', label: 'Concept family', suggest: ['Product-in-Context', 'System/Stack', 'Proof', 'Lifestyle/Emotional', 'Social Proof'] },
-  { key: 'format', label: 'Format', suggest: ['Carousel', 'Feed Video', 'Reels', 'Static'] },
+  { key: 'format', label: 'Format', suggest: ['Photo', 'Video'] },
   { key: 'aspect', label: 'Aspect', suggest: ['9x16', '4x5', '1x1', '1.91x1', '16x9', '4x1'] },
   { key: 'creator', label: 'Creator' },
   // Product line season the asset belongs to (not the weather in the photo; that's Season).
@@ -61,6 +61,10 @@ class TagStore {
     for (const f of DEFAULT_FIELDS) {
       if (!this.data.fields.some((x) => x.key === f.key)) this.data.fields.push({ ...f });
     }
+    // Format used to list ad placements; it's now just Photo or Video. Only the
+    // untouched old presets are replaced, never a list someone edited.
+    const format = this.data.fields.find((f) => f.key === 'format');
+    if (format && String(format.suggest) === 'Carousel,Feed Video,Reels,Static') format.suggest = ['Photo', 'Video'];
   }
 
   fieldKeys() {
@@ -183,10 +187,10 @@ class TagStore {
     const { name, errors } = naming.compose(parts);
     if (!name) throw new RangeError(Object.values(errors)[0]);
     const clean = {
-      ...Object.fromEntries(LABEL_FIELDS.map((k) => [k, String(parts[k]).trim().slice(0, MAX_VALUE)])),
+      ...Object.fromEntries(LABEL_FIELDS.map((k) => [k, String(parts[k] ?? '').trim().slice(0, MAX_VALUE)])),
       aspect: naming.aspectToken(parts.aspect),
-      date: parts.date,
-      version: Number(parts.version),
+      date: String(parts.date || '').trim(),
+      version: String(parts.version ?? '').trim() ? Number(parts.version) : null,
     };
     const updatedAt = new Date().toISOString();
     await this.store.update((data) => {
@@ -195,7 +199,7 @@ class TagStore {
       const add = {};
       const remove = {};
       for (const k of LABEL_FIELDS) {
-        add[k] = [clean[k]];
+        if (clean[k]) add[k] = [clean[k]];
         if (old[k] && old[k].toLowerCase() !== clean[k].toLowerCase()) remove[k] = [old[k]];
       }
       this.mutate(data, this.clean([{ id, add, remove }]));

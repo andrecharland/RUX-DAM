@@ -17,7 +17,11 @@ test('builds names in the RUX convention from plain values', () => {
     'RUX_70LCore_ProductInContext_FeedVideo_1.91x1_Cal_2026-06-08_v12');
   const bad = naming.compose({ ...parts, product: '', aspect: 'tall', date: '2026-13-40', version: 0 });
   assert.strictEqual(bad.name, '');
-  assert.deepStrictEqual(Object.keys(bad.errors).sort(), ['aspect', 'date', 'product', 'version']);
+  assert.deepStrictEqual(Object.keys(bad.errors).sort(), ['aspect', 'date', 'version']);
+  // Every part is optional; the name keeps the ones given.
+  assert.strictEqual(naming.compose({ product: 'Gear Box 70L', format: 'Photo', date: '2026-06-08' }).name, 'RUX_GearBox70L_Photo_2026-06-08');
+  assert.strictEqual(naming.compose({ creator: 'Blake Jorgensen', version: '2' }).name, 'RUX_BlakeJorgensen_v02');
+  assert.strictEqual(naming.compose({}).name, '', 'needs at least one part');
 });
 
 test('reads names that follow the convention, and aspects from pixels', () => {
@@ -71,6 +75,12 @@ test('labels on folders and files: name, tags, search, downloads', async () => {
     assert.deepStrictEqual(relabelled.tags.format, ['Feed Video']);
     assert.deepStrictEqual(relabelled.tags.aspect, ['4x5']);
 
+    // Parts left empty are left out of the name, and drop the tags they had added.
+    await post('/api/labels/fShoot', { parts: { product: 'Gear Box 70L', format: 'Video', date: '', version: '' } });
+    const partial = (await get('/api/folders')).find((f) => f.id === 'fShoot');
+    assert.strictEqual(partial.label.name, 'RUX_GearBox70L_Video');
+    assert.deepStrictEqual(partial.tags, { product: ['Gear Box 70L'], format: ['Video'] });
+
     // A file label names its download; the extension is kept.
     await post('/api/labels/v1', { parts: { ...parts, version: 3 } });
     const dl = await fetch(`${base}/api/assets/v1/file?download=1`);
@@ -78,7 +88,7 @@ test('labels on folders and files: name, tags, search, downloads', async () => {
 
     const invalid = await post('/api/labels/v1', { parts: { ...parts, date: 'June 8' } });
     assert.strictEqual(invalid.status, 400);
-    assert.match((await invalid.json()).error, /Date/);
+    assert.match((await invalid.json()).error, /date/i);
     assert.strictEqual((await post('/api/labels/nope', { parts })).status, 404);
 
     await post('/api/labels/v1', { remove: true });

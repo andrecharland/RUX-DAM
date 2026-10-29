@@ -86,7 +86,11 @@
       <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
       <section id="folder-tags" class="folder-tags" hidden>
         <div class="ft-head">
-          <div id="folder-label" class="label-row"></div>
+          <button id="ft-toggle" class="ft-toggle" type="button" aria-expanded="false" aria-controls="ft-body">
+            <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+            <strong>Folder details</strong>
+            <span id="ft-summary" class="ft-summary"></span>
+          </button>
           <div class="ft-actions">
             <button id="folder-add-tag" class="btn ghost small" type="button">+ Add tag</button>
             <details id="folder-suggest-menu" class="menu" hidden>
@@ -98,8 +102,11 @@
             </details>
           </div>
         </div>
-        <div id="folder-editor"></div>
-        <div id="folder-ai" class="folder-ai"></div>
+        <div id="ft-body" class="ft-body" hidden>
+          <div id="folder-label" class="label-row"></div>
+          <div id="folder-editor"></div>
+          <div id="folder-ai" class="folder-ai"></div>
+        </div>
       </section>
       <section id="folder-cards" class="folder-cards" aria-label="Folders" hidden></section>
       <div class="toolbar">

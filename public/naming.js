@@ -43,24 +43,24 @@
   }
 
   // Returns { name, errors } where errors is { partKey: message } (empty when valid).
+  // Every part is optional: the name keeps the parts given, in convention order,
+  // e.g. "RUX_GearBox70L_Photo_2026-06-08". At least one part is needed.
   function compose(parts = {}) {
     const errors = {};
-    const pieces = {
-      product: productToken(parts.product),
-      concept: token(parts.concept),
-      format: token(parts.format),
-      aspect: aspectToken(parts.aspect),
-      creator: token(parts.creator),
-    };
-    for (const p of PARTS.slice(0, 5)) {
-      if (!pieces[p.key]) errors[p.key] = p.key === 'aspect' && parts.aspect ? 'Use width x height, e.g. 9x16' : `${p.label} is required`;
+    const aspect = aspectToken(parts.aspect);
+    if (String(parts.aspect || '').trim() && !aspect) errors.aspect = 'Use width x height, e.g. 9x16';
+    const date = String(parts.date || '').trim();
+    if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)))) {
+      errors.date = 'Use a date like 2026-06-08';
     }
-    const date = String(parts.date || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) errors.date = 'Date is required (YYYY-MM-DD)';
-    const version = Number(parts.version);
-    if (!Number.isInteger(version) || version < 1 || version > 999) errors.version = 'Version must be 1 or more';
-    const name = Object.keys(errors).length ? '' : ['RUX', pieces.product, pieces.concept, pieces.format, pieces.aspect,
-      pieces.creator, date, `v${String(version).padStart(2, '0')}`].join('_');
+    const v = String(parts.version ?? '').trim();
+    const version = Number(v);
+    if (v && (!Number.isInteger(version) || version < 1 || version > 999)) errors.version = 'Version must be 1 or more';
+    const pieces = [productToken(parts.product), token(parts.concept), token(parts.format), aspect, token(parts.creator), date]
+      .filter(Boolean);
+    if (!pieces.length && !Object.keys(errors).length) errors.product = 'Fill in at least one part';
+    const name = Object.keys(errors).length ? ''
+      : ['RUX', ...pieces, v ? `v${String(version).padStart(2, '0')}` : ''].filter(Boolean).join('_');
     return { name, errors };
   }
 

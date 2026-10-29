@@ -106,8 +106,18 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 .crumbs .sep { color: var(--muted); }
 .folder-tags { margin: 12px 16px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .ft-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.ft-head .label-row { margin: 0; flex: 1 1 260px; min-height: 30px; }
-.ft-head .label-row .hint { margin: 0; }
+.ft-toggle { all: unset; cursor: pointer; flex: 1 1 260px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.ft-toggle:focus-visible { outline: 2px solid var(--select); border-radius: 6px; }
+.ft-toggle .chev { flex: none; color: var(--muted); transition: transform .15s; }
+.ft-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.ft-summary { display: flex; flex-wrap: wrap; gap: 4px 0; color: var(--muted); font-size: 13px; min-width: 0; }
+.ft-summary span + span::before { content: '·'; margin: 0 6px; }
+.ft-summary .ai-note { color: var(--ai); }
+.ft-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ft-body .label-row { margin: 0; }
+.ft-body .label-row .hint { margin: 0; }
+.label-plain { font-weight: 600; }
+.ft-body .label-row code { font-size: 12px; color: var(--muted); }
 .ft-actions { display: flex; gap: 8px; align-items: center; }
 .btn.small { padding: 5px 10px; font-size: 13px; }
 .folder-tags .editor { margin-top: 8px; }

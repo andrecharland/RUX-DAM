@@ -14,7 +14,7 @@ assets, do it in Drive and the DAM picks it up on the next sync.
   **More from this shoot** and **More like this**
 - Visual similarity and search by description with Vertex AI (optional)
 - Metadata fields (Product, Activity, Color, Vehicle, Season, Collection season, Event, Location,
-  People, Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
+  People, Tags, plus your own) on files or whole folders (a folder's details panel folds away), with bulk tagging and sidebar filters
 - Search by file name, folder path or metadata; filter by type (image or video)
 - Filter by file details: date taken (presets or a custom range), year, format (JPG, RAW, HEIC,
   MP4, MOV…), orientation, resolution, file size, video length and camera; sort by date taken,
@@ -205,15 +205,17 @@ Playbook:
 `RUX_[Product]_[ConceptFamily]_[Format]_[Aspect]_[Creator]_[YYYY-MM-DD]_v01`
 e.g. `RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v01`
 
-Click **Add label** in a folder's panel or under a file's name in the viewer. Each part has
-suggestions (Concept family: Product-in-Context, System/Stack, Proof, Lifestyle/Emotional, Social
-Proof; Format: Carousel, Feed Video, Reels, Static; Aspect: 9x16, 4x5, 1x1, 1.91x1, 16x9, 4x1;
+Click **Add label** in a folder's details or under a file's name in the viewer. Every part is
+optional: the name keeps the parts filled in, in order (e.g. `RUX_GearBox70L_Photo_2026-06-08`).
+Each part has suggestions (Concept family: Product-in-Context, System/Stack, Proof,
+Lifestyle/Emotional, Social Proof; Format: Photo or Video; Aspect: 9x16, 4x5, 1x1, 1.91x1, 16x9, 4x1;
 change them under **Edit field values**), and the name is built as you type: spaces and punctuation
 are removed and words capitalized ("Gear Box 70L" becomes `GearBox70L`, a leading "RUX" is dropped
 from products, "9:16" becomes `9x16`).
 
-- The label is shown in place of the Drive name (folder tree, breadcrumbs, cards, viewer) with the
-  Drive name underneath; nothing in Drive is renamed. Search matches labels.
+- The label is shown in plain words in place of the Drive name (folder tree, breadcrumbs, cards,
+  viewer), e.g. "Gear Box 70L · Proof · Reels 9x16 · by Cal · Jun 8, 2026 · version 1", with the
+  `RUX_…` name and the Drive name in the details; nothing in Drive is renamed. Search matches labels.
 - The parts are also added as tags (Product, Concept family, Format, Aspect, Creator), so they can be
   filtered, and a folder's label parts apply to everything inside it. Editing a label replaces the
   tags its previous version added; removing a label keeps its tags.
