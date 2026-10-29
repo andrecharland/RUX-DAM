@@ -377,6 +377,29 @@ npm run test:e2e   # drives the real front end in headless Chromium against a fa
                    # skipped when it isn't installed). Makes a short test video with ffmpeg if available.
 ```
 
+## Code layout
+
+```
+src/
+  server.js        createApp(): middleware order (headers, access, CSRF, static) and the API routers
+  start.js         production start-up: builds every service from environment variables
+  routes/          API by area: assets (browse, search, similar, status, sync), metadata (fields,
+                   tags, rights), curation, suggest (Claude), media (previews and file proxy)
+  security.js      security headers, CSRF check, rate limits, video range limits
+  auth.js          Google sign-in and signed session cookies; access.js: shared password
+  library.js       the in-memory index, search and filters, folder stats
+  drive.js         Google Drive client (crawl, previews, media); google.js: auth and retries
+  store.js         JSON documents in Cloud Storage with conditional writes
+  tags.js, rights.js, curation.js, suggest.js, embeddings.js, thumbcache.js: the stores and services
+public/
+  index.html, style.css
+  js/              ES modules: core (state, DOM, API), url, previews, grid, filters, folders,
+                   tags, selection, suggest, curation, titles, viewer; main.js wires events and starts
+  naming.js, shopify.js, specs.js   shared with the server (UMD)
+test/              unit and API tests (npm test)
+e2e/               browser tests against a fake Drive, Claude and Vertex AI (npm run test:e2e)
+```
+
 ## Security
 
 - Access needs Google sign-in or the shared password; the server refuses to start with neither
