@@ -225,7 +225,7 @@ export function folderCard(f, { where } = {}) {
     .filter(Boolean).join(' · ');
   const tagValues = Object.values(f.tags || {}).flat().slice(0, 3);
   return el('button', { type: 'button', class: 'fcard', title: f.path || f.name, onclick: () => selectFolder(f.id) }, [
-    el('div', { class: 'fcover' }, [
+    el('div', { class: (f.covers?.length || 0) < 3 ? 'fcover single' : 'fcover' }, [
       ...covers,
       f.restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
       el('span', { class: 'count', text: f.count.toLocaleString() }),

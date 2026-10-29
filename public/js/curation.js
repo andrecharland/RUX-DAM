@@ -1,4 +1,5 @@
-import { $, api, copyText, el, plural, state, viewer } from './core.js';
+import { $, api, copyText, downloadZip, el, grid, plural, state, viewer } from './core.js';
+import { DPR, thumbUrl } from './previews.js';
 import { restoreEach, toast } from './toast.js';
 import { renderCrumbs, renderFolderPanel, renderTree, selectFolder } from './folders.js';
 import { load, reloadInPlace } from './grid.js';
@@ -16,6 +17,7 @@ export async function loadCollections() {
   }
   renderCollections();
   renderCollectionPanel();
+  renderCollectionCards();
   renderCrumbs();
 }
 
@@ -56,19 +58,47 @@ export function renderCollectionPanel() {
   if (state.fav) {
     box.replaceChildren(el('div', { class: 'ft-head' }, [
       el('div', {}, [el('strong', { text: '♥ My favorites' }), el('p', { class: 'hint', text: 'Only you see your favorites. Press F in the viewer, or click ♥ on a photo.' })]),
+      el('div', { class: 'ft-actions' }, [
+        state.favCount ? el('button', { type: 'button', class: 'btn ghost small', text: 'Download all', onclick: () => downloadAll('My favorites') }) : '',
+      ]),
     ]));
     return;
   }
   if (!c) return;
   const updated = new Date(c.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  const edit = async (change) => {
-    await api(`/api/collections/${encodeURIComponent(c.id)}`, change);
-    await loadCollections();
+  const url = `/api/collections/${encodeURIComponent(c.id)}`;
+  // Name and description are edited in place: saved on Enter or when leaving
+  // the field; Escape puts the old text back.
+  const field = (tag, key, attrs) => {
+    const input = el(tag, { ...attrs, value: c[key] || '' });
+    if (tag === 'textarea') input.value = c[key] || '';
+    const save = async () => {
+      const value = input.value.trim();
+      if (value === (c[key] || '') || (key === 'name' && !value)) {
+        input.value = c[key] || '';
+        return;
+      }
+      await api(url, { [key]: value });
+      toast(key === 'name' ? `Renamed to “${value}”` : 'Description saved');
+      await loadCollections();
+      renderCrumbs();
+    };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        input.value = c[key] || '';
+        input.blur();
+      } else if (e.key === 'Enter' && (tag === 'input' || !e.shiftKey)) {
+        e.preventDefault();
+        input.blur();
+      }
+    });
+    return input;
   };
   box.replaceChildren(
     el('div', { class: 'ft-head' }, [
       el('div', { class: 'col-title' }, [
-        el('strong', { text: c.name }),
+        field('input', 'name', { class: 'col-name', 'aria-label': 'Collection name', maxlength: 80 }),
         el('span', { class: 'ft-summary' }, [
           el('span', { text: plural(c.count, 'item') }),
           c.createdBy ? el('span', { text: `made by ${c.createdBy.split('@')[0]}` }) : '',
@@ -76,24 +106,102 @@ export function renderCollectionPanel() {
         ]),
       ]),
       el('div', { class: 'ft-actions' }, [
-        el('button', { type: 'button', class: 'btn ghost small', text: 'Rename', onclick: () => {
-          const name = prompt('Collection name:', c.name);
-          if (name?.trim()) edit({ name });
-        } }),
-        el('button', { type: 'button', class: 'btn ghost small', text: c.description ? 'Edit description' : 'Add description', onclick: () => {
-          const description = prompt('Description (who it is for, what it is for):', c.description || '');
-          if (description !== null) edit({ description });
-        } }),
+        c.count ? el('button', { type: 'button', class: 'btn ghost small', text: 'Download all', onclick: () => downloadZip(c.items, c.name) }) : '',
         el('button', { type: 'button', class: 'btn ghost small', text: 'Copy link', onclick: (e) => copyText(e.target, location.href) }),
         el('button', { type: 'button', class: 'btn ghost small danger', text: 'Delete', onclick: async () => {
           if (!confirm(`Delete the collection “${c.name}”? The photos and videos themselves aren’t affected.`)) return;
-          await api(`/api/collections/${encodeURIComponent(c.id)}`, { delete: true });
+          await api(url, { delete: true });
           await loadCollections();
           selectFolder('');
+          toast(`Deleted “${c.name}”`);
         } }),
       ]),
     ]),
-    c.description ? el('p', { class: 'col-desc', text: c.description }) : '',
+    field('textarea', 'description', {
+      class: 'col-desc', rows: 1, maxlength: 500, 'aria-label': 'Description',
+      placeholder: 'Add a description: who it’s for, what it’s for…',
+    }),
+    el('p', { class: 'hint col-hint', text: canReorder() ? 'Drag photos to change the order.' : '' }),
+  );
+}
+
+// Every item of the open view (favorites), for "Download all".
+async function downloadAll(name) {
+  const ids = [];
+  for (let total = Infinity; ids.length < total;) {
+    const data = await api(`/api/assets?fav=1&limit=500&offset=${ids.length}`);
+    total = data.total;
+    if (!data.items.length) break;
+    ids.push(...data.items.map((a) => a.id));
+  }
+  downloadZip(ids, name);
+}
+
+// Collections show in their own order, which can be changed by dragging, as
+// long as no other sort or filter is reordering or hiding items.
+export function canReorder() {
+  return Boolean(state.collection) && !state.sort && !state.q && !state.kind && !state.rights && !state.suggested &&
+    !state.range && !state.rating && !state.tags.size && !state.file.size;
+}
+
+let dragged = null;
+grid.addEventListener('dragstart', (e) => {
+  const card = e.target.closest?.('.card');
+  if (!card || !canReorder()) return;
+  dragged = card;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', card.dataset.id);
+});
+grid.addEventListener('dragover', (e) => {
+  const target = e.target.closest?.('.card');
+  if (!dragged || !target || target === dragged) return;
+  e.preventDefault();
+  // Drop before the tile when over its left half, after it when over the right.
+  const box = target.getBoundingClientRect();
+  const after = e.clientX > box.left + box.width / 2;
+  target.parentElement.insertBefore(dragged, after ? target.nextSibling : target);
+});
+grid.addEventListener('dragend', async () => {
+  if (!dragged) return;
+  dragged.classList.remove('dragging');
+  dragged = null;
+  const c = state.collections.find((x) => x.id === state.collection);
+  const before = c?.items || [];
+  const order = [...grid.querySelectorAll('.card:not(.ghost)')].map((x) => x.dataset.id);
+  if (order.join() === before.slice(0, order.length).join()) return;
+  const url = `/api/collections/${encodeURIComponent(state.collection)}`;
+  await api(url, { order });
+  await loadCollections();
+  toast('Order saved', {
+    undo: async () => {
+      await api(url, { order: before });
+      await Promise.all([load(true), loadCollections()]);
+    },
+  });
+});
+
+// Collection cards on the home page: the most recently changed, with covers.
+export function renderCollectionCards() {
+  const box = $('collection-cards');
+  const home = !state.folder && !state.collection && !state.fav && !state.like && !state.q && !state.kind && !state.rights &&
+    !state.suggested && !state.range && !state.rating && !state.tags.size && !state.file.size;
+  const list = state.collections.filter((c) => c.count).slice(0, 8);
+  box.hidden = !home || !list.length;
+  if (box.hidden) return box.replaceChildren();
+  box.replaceChildren(
+    el('div', { class: 'fhead' }, [el('h2', { text: 'Collections' })]),
+    el('div', { class: 'fcards' }, list.map((c) => {
+      const covers = [0, 1, 2].map((i) => el('div', {}, c.covers?.[i]
+        ? [el('img', { src: thumbUrl(c.covers[i], (i ? 120 : 260) * DPR), alt: '', loading: 'lazy', decoding: 'async' })] : []));
+      return el('button', { type: 'button', class: 'fcard', title: c.description || c.name, onclick: () => selectCollection(c.id) }, [
+        el('div', { class: (c.covers?.length || 0) < 3 ? 'fcover single' : 'fcover' }, [...covers, el('span', { class: 'count', text: c.count.toLocaleString() })]),
+        el('div', { class: 'fbody' }, [
+          el('strong', { text: c.name }),
+          el('span', { class: 'fmeta', text: c.description || `updated ${new Date(c.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` }),
+        ]),
+      ]);
+    })),
   );
 }
 

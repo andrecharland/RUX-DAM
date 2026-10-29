@@ -184,6 +184,9 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 }
 .fcover > div { position: relative; background: var(--line); overflow: hidden; min-height: 0; }
 .fcover > div:first-child { grid-row: 1 / 3; }
+/* Fewer than three photos: one cover across the whole card. */
+.fcover.single > div:first-child { grid-column: 1 / -1; }
+.fcover.single > div:not(:first-child, .count, .flag) { display: none; }
 .fcover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .fcover .count { position: absolute; right: 8px; bottom: 8px; background: rgba(17,17,19,.78); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 4px; }
 .fcover .flag { left: 8px; top: 8px; }
@@ -484,7 +487,16 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .collection-panel .col-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .collection-panel .col-title strong { font-size: 16px; }
 .collection-panel .hint { margin: 2px 0 0; }
-.col-desc { margin: 8px 0 0; color: var(--muted); }
+/* Collection name and description, edited in place */
+.col-name { all: unset; font-size: 17px; font-weight: 600; border-radius: 6px; padding: 2px 6px; margin-left: -6px; min-width: 0; width: 100%; box-sizing: border-box; }
+.col-desc { all: unset; display: block; width: 100%; box-sizing: border-box; margin: 8px 0 0 -6px; padding: 4px 6px; border-radius: 6px;
+  color: var(--muted); font-size: 14px; line-height: 1.4; resize: none; field-sizing: content; min-height: 1.4em; }
+.col-name:hover, .col-desc:hover { background: var(--chip); }
+.col-name:focus, .col-desc:focus { background: var(--bg); outline: 2px solid var(--select); color: var(--text); }
+.col-hint:empty { display: none; }
+.col-hint { margin: 6px 0 0; font-size: 12px; }
+.card[draggable="true"] { cursor: grab; }
+.card.dragging { opacity: .35; }
 .btn.danger { color: var(--danger); }
 .collect-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }
 .collect-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; }

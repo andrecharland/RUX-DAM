@@ -96,6 +96,36 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('3 '));
   });
 
+  it('renames in place, reorders by dragging, downloads, and shows on the home page', async () => {
+    await page.click('#collections button:has-text("Spring launch")');
+    await page.waitForSelector('.col-name');
+    await page.fill('.col-name', 'Spring 27 launch');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#collections button:has-text("Spring 27 launch")');
+    assert.match(await page.textContent('#crumbs'), /Spring 27 launch/);
+    await page.fill('.col-desc', 'Hero shots for the paid social launch');
+    await page.locator('.col-desc').blur();
+    await page.waitForFunction(() => document.querySelector('.col-desc').value === 'Hero shots for the paid social launch');
+
+    const ids = () => page.locator('#grid .card').evaluateAll((cs) => cs.map((c) => c.dataset.id));
+    const before = await ids();
+    assert.match(await page.textContent('.col-hint'), /Drag/);
+    await page.dragAndDrop('#grid .card >> nth=2', '#grid .card >> nth=0', { targetPosition: { x: 5, y: 20 } });
+    await page.waitForSelector('#toast:has-text("Order saved")');
+    const after = [before[2], before[0], before[1]];
+    assert.deepStrictEqual(await ids(), after);
+    await page.reload();
+    await page.waitForSelector('#grid .card');
+    assert.deepStrictEqual(await ids(), after, 'saved');
+
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#collection-panel button:has-text("Download all")')]);
+    assert.strictEqual(download.suggestedFilename(), 'Spring 27 launch.zip');
+
+    await page.click('#tree button:has-text("All assets")');
+    await page.waitForSelector('#collection-cards .fcard:has-text("Spring 27 launch")');
+    assert.match(await page.textContent('#collection-cards'), /Hero shots/);
+  });
+
   it('lists my favorites and filters and sorts by rating', async () => {
     await page.click('#collections button:has-text("My favorites")');
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('1 '));

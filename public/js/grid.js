@@ -1,5 +1,5 @@
 import { $, PAGE, api, el, formatDuration, grid, state, viewer } from './core.js';
-import { renderCurate } from './curation.js';
+import { canReorder, renderCollectionCards, renderCurate } from './curation.js';
 import { renderChips, renderFacets } from './filters.js';
 import { loadFolders, renderFolderCards } from './folders.js';
 import { aspectOf, sampleColor, tileUrl } from './previews.js';
@@ -22,7 +22,7 @@ export function card(asset) {
   const where = [asset.collection, asset.path].filter(Boolean).join(' / ');
   return el('div', {
     class: ['card', restricted && 'restricted', selected && 'selected'].filter(Boolean).join(' '),
-    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset),
+    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset), draggable: canReorder() ? 'true' : false,
     style: `--ar: ${ar.toFixed(3)}${asset.color ? `; background-color: ${asset.color}` : ''}`,
   }, [
     el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected }),
@@ -190,6 +190,7 @@ export async function load(reset = false) {
     writeUrl();
     renderChips();
     renderFolderCards();
+    renderCollectionCards();
   }
   try {
     const data = await api(`/api/assets?${queryParams({ offset: state.offset, limit: PAGE })}`);
