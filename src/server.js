@@ -47,6 +47,19 @@ function basicAuth(password) {
   };
 }
 
+// Cloud Run refuses responses over 32 MB that declare their length, so video
+// playback (which asks for "bytes=0-", the whole file) gets 8 MB pieces; the
+// browser asks for the next piece as it plays or seeks.
+const MAX_RESPONSE = 30 * 1024 * 1024;
+const RANGE_CHUNK = 8 * 1024 * 1024;
+function limitRange(range) {
+  const m = /^bytes=(\d+)-(\d*)$/.exec(range || '');
+  if (!m) return range;
+  const start = Number(m[1]);
+  const end = Math.min(m[2] ? Number(m[2]) : Infinity, start + RANGE_CHUNK - 1);
+  return `bytes=${start}-${end}`;
+}
+
 async function pipeDrive(driveRes, res, passHeaders) {
   res.status(driveRes.status);
   for (const h of passHeaders) {
@@ -411,7 +424,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
   app.get('/api/assets/:id/file', known, async (req, res, next) => {
     try {
       const asset = library.byId.get(req.params.id);
-      const driveRes = await drive.media(req.params.id, req.get('range'));
+      const driveRes = await drive.media(req.params.id, limitRange(req.get('range')));
       if (!driveRes.ok && driveRes.status !== 206) return res.sendStatus(driveRes.status);
       const disposition = req.query.download ? 'attachment' : 'inline';
       // Downloads are named by the asset's RUX_ name, keeping the original extension.
@@ -420,7 +433,11 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
       const filename = label?.name ? `${label.name}${ext}` : asset.name;
       res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.set('Cache-Control', 'private, max-age=3600');
-      await pipeDrive(driveRes, res, ['content-type', 'content-length', 'content-range', 'accept-ranges']);
+      // A whole-file response is streamed without a length (chunked), which
+      // Cloud Run allows at any size; with a length it caps responses at 32 MB.
+      const length = Number(driveRes.headers.get('content-length')) || 0;
+      const headers = ['content-type', 'content-range', 'accept-ranges', ...(length && length < MAX_RESPONSE ? ['content-length'] : [])];
+      await pipeDrive(driveRes, res, headers);
     } catch (err) {
       next(err);
     }

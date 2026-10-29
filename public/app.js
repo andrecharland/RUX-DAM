@@ -1364,14 +1364,9 @@ async function saveRights(status) {
   $('r-msg').textContent = isFolder ? 'Saved for the whole folder.' : 'Saved.';
 }
 
-function open(asset) {
-  state.current = asset;
-  const fileUrl = `/api/assets/${asset.id}/file`;
-  // Photos show Drive's large preview (a JPG), which works for formats browsers
-  // can't display (HEIC, RAW, TIFF, PSD) and loads faster than the original.
-  // If there's no preview, fall back to the original file.
-  const preview = asset.hasThumbnail ? viewerUrl(asset) : null;
-  // Shows the grid's preview (already loaded) straight away, then the sharp one.
+// Shows the grid's preview (already loaded) straight away, then the sharp one;
+// the original file if there's no preview or it fails.
+function photoElement(asset, preview, fileUrl) {
   const image = el('img', { src: preview ? tileUrl(asset) : fileUrl, alt: asset.name, class: preview ? 'soft' : '' });
   image.addEventListener('error', () => { if (image.getAttribute('src') !== fileUrl) image.src = fileUrl; });
   if (preview) {
@@ -1385,9 +1380,19 @@ function open(asset) {
     sharp.onerror = () => { if (state.current?.id === asset.id) image.src = fileUrl; };
     sharp.src = preview;
   }
+  return image;
+}
+
+function open(asset) {
+  state.current = asset;
+  const fileUrl = `/api/assets/${asset.id}/file`;
+  // Photos show Drive's large preview (a JPG), which works for formats browsers
+  // can't display (HEIC, RAW, TIFF, PSD) and loads faster than the original.
+  // If there's no preview, fall back to the original file.
+  const preview = asset.hasThumbnail ? viewerUrl(asset) : null;
   const media = asset.kind === 'video'
-    ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview })
-    : image;
+    ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview, preload: 'metadata' })
+    : photoElement(asset, preview, fileUrl);
   $('stage').replaceChildren(media);
   prefetchNeighbors(asset);
   renderViewerLabel(asset);

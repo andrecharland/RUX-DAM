@@ -95,6 +95,11 @@ test('proxies media with range support and blocks unknown ids', async () => {
     assert.strictEqual(res.status, 206);
     assert.strictEqual(await res.text(), 'bytes:vid1:bytes=0-1');
     assert.match(res.headers.get('content-disposition'), /^attachment; filename\*=UTF-8''Launch\.mp4/);
+    // Open-ended and large ranges are served in 8 MB pieces (Cloud Run caps responses at 32 MB).
+    const open = await fetch(`${base}/api/assets/vid1/file`, { headers: { Range: 'bytes=0-' } });
+    assert.strictEqual(await open.text(), 'bytes:vid1:bytes=0-8388607');
+    const later = await fetch(`${base}/api/assets/vid1/file`, { headers: { Range: 'bytes=100000000-900000000' } });
+    assert.strictEqual(await later.text(), 'bytes:vid1:bytes=100000000-108388607');
 
     const thumb = await fetch(`${base}/api/assets/img1/thumbnail`);
     assert.strictEqual(await thumb.text(), 'thumb');
