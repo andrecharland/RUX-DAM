@@ -1,4 +1,5 @@
 import { $, api, copyText, downloadZip, el, grid, plural, state, viewer } from './core.js';
+import { ask } from './dialogs.js';
 import { DPR, thumbUrl } from './previews.js';
 import { clearAllFilters } from './filters.js';
 import { restoreEach, toast } from './toast.js';
@@ -105,7 +106,7 @@ export function renderCollectionPanel() {
         field('input', 'name', { class: 'col-name', 'aria-label': 'Collection name', maxlength: 80 }),
         el('span', { class: 'ft-summary' }, [
           el('span', { text: plural(c.count, 'item') }),
-          c.createdBy ? el('span', { text: `made by ${c.createdBy.split('@')[0]}` }) : '',
+          c.createdBy ? el('span', { text: `made by ${c.createdBy.split('@')[0].replace(/^./, (x) => x.toUpperCase())}` }) : '',
           el('span', { text: `updated ${updated}` }),
         ]),
       ]),
@@ -113,7 +114,7 @@ export function renderCollectionPanel() {
         c.count ? el('button', { type: 'button', class: 'btn ghost small', text: 'Download all', onclick: () => downloadZip(c.items, c.name) }) : '',
         el('button', { type: 'button', class: 'btn ghost small', text: 'Copy link', onclick: (e) => copyText(e.target, `${location.origin}/?collection=${encodeURIComponent(c.id)}`) }),
         el('button', { type: 'button', class: 'btn ghost small danger', text: 'Delete', onclick: async () => {
-          if (!confirm(`Delete the collection “${c.name}”? The photos and videos themselves aren’t affected.`)) return;
+          if (!await ask({ title: `Delete “${c.name}”?`, body: 'The photos and videos themselves aren’t affected.', confirm: 'Delete collection', danger: true })) return;
           await api(url, { delete: true });
           await loadCollections();
           selectFolder('');
@@ -125,7 +126,7 @@ export function renderCollectionPanel() {
       class: 'col-desc', rows: 1, maxlength: 500, 'aria-label': 'Description',
       placeholder: 'Add a description: who it’s for, what it’s for…',
     }),
-    el('p', { class: 'hint col-hint', text: canReorder() ? 'Drag photos to change the order.' : '' }),
+    el('p', { class: 'hint col-hint', text: canReorder() ? 'Drag photos to change the order.' : 'Clear the search, filters and sort to drag photos into a new order.' }),
   );
 }
 

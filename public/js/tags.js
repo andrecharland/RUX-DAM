@@ -1,8 +1,13 @@
 import { $, api, el, state } from './core.js';
+import { askText } from './dialogs.js';
+import { toast } from './toast.js';
 import { renderFacets } from './filters.js';
 import { renderFolderPanel } from './folders.js';
 import { afterEdit } from './grid.js';
 import { renderBulk } from './selection.js';
+
+// Fields only used to build RUX file names (see titles.js and the README).
+const NAMING_ONLY = ['concept', 'format', 'aspect', 'shoot_date', 'version'];
 
 // Metadata fields, the tag editor, and editing field preset values (with CSV import).
 
@@ -52,7 +57,13 @@ export function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No meta
     root.append(...(rows.length ? rows : [el('p', { class: 'empty-note', text: emptyText })]));
   }
 
-  const select = el('select', { 'aria-label': 'Field' }, state.fields.map((f) => el('option', { value: f.key, text: f.label })));
+  // Everyday tags first; the fields only used for RUX file names in their own group.
+  const option = (f) => el('option', { value: f.key, text: f.label });
+  const naming = state.fields.filter((f) => NAMING_ONLY.includes(f.key));
+  const select = el('select', { 'aria-label': 'Field' }, [
+    el('optgroup', { label: 'Describe' }, state.fields.filter((f) => !NAMING_ONLY.includes(f.key)).map(option)),
+    naming.length ? el('optgroup', { label: 'File naming' }, naming.map(option)) : '',
+  ]);
   const input = el('input', { type: 'text', placeholder: 'Value…', 'aria-label': 'Value', maxlength: 80 });
   const syncList = () => {
     input.setAttribute('list', `dl-${select.value}`);
@@ -86,16 +97,20 @@ export const applyTo = (ids) => async (change) => {
 
 
 $('add-field').addEventListener('click', async () => {
-  const label = prompt('Name of the new field (for example: Campaign, Photographer, Shoot):');
-  if (!label?.trim()) return;
+  const label = await askText({
+    title: 'Add a field', label: 'Name', placeholder: 'e.g. Campaign, Photographer, Shoot',
+    body: 'A new kind of tag the whole team can use, on files and folders.', confirm: 'Add field',
+  });
+  if (!label) return;
   try {
     await api('/api/fields', { label });
     await loadFields();
     renderFacets();
     renderFolderPanel();
     renderBulk();
+    toast(`Added the field “${label}”. Pick it under + Add tag.`);
   } catch (err) {
-    alert(err.message);
+    toast(err.message);
   }
 });
 export const vocab = { edits: {}, current: '' };

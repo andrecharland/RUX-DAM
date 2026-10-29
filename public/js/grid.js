@@ -139,7 +139,14 @@ export function renderMeta() {
     $('meta').textContent = 'Indexing Google Drive… the first scan after setup can take a minute.';
     return;
   }
-  $('meta').textContent = `${state.total.toLocaleString()} asset${state.total === 1 ? '' : 's'}`;
+  const count = (n) => `${n.toLocaleString()} asset${n === 1 ? '' : 's'}`;
+  // A search whose words match nothing still shows photos that look like
+  // them: say so, instead of a count that suggests they matched.
+  if (state.q && state.textTotal === 0 && state.total) {
+    $('meta').textContent = `No names or tags match “${state.q}”. ${state.total.toLocaleString()} look similar:`;
+  } else {
+    $('meta').textContent = count(state.total);
+  }
 }
 
 // After a restart the server shows its saved index while it re-checks Drive;
@@ -196,6 +203,7 @@ export async function load(reset = false) {
     const data = await api(`/api/assets?${queryParams({ offset: state.offset, limit: PAGE })}`);
     if (seq !== loadSeq) return;
     state.total = data.total;
+    state.textTotal = data.textTotal;
     state.offset += data.items.length;
     state.months = data.months;
     state.similarMode = data.similarMode || '';

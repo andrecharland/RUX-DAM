@@ -351,6 +351,8 @@ class Library extends EventEmitter {
     }
     return {
       total: matches.length,
+      // How many matched the search text itself (the rest look like it).
+      textTotal: rankMode === 'append' ? matches.filter((v) => !v.match).length : matches.length,
       items: matches.slice(offset, offset + limit),
       facets,
       fileFacets: fileCounts,

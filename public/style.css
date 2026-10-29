@@ -381,7 +381,14 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
     transform: translateX(-100%); transition: transform .15s;
   }
   body.side-open .side { transform: none; }
+  /* The drawer has a close button and dims the page behind it. */
+  .side-close { display: block; }
+  .side { padding-top: 52px; }
+  body.side-open::after { content: ''; position: fixed; inset: 0; z-index: 4; background: rgba(0,0,0,.35); }
 }
+.side-close { all: unset; display: none; position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border-radius: 50%;
+  text-align: center; line-height: 36px; font-size: 22px; cursor: pointer; color: var(--muted); }
+@media (max-width: 900px) { .side-close { display: block; } }
 @media (max-width: 720px) {
   /* Two rows: menu, title and account; then search and Filter & sort. */
   .bar h1 { flex: 1 1 auto; }
@@ -407,6 +414,17 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
   .sheet-toggle span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
   .viewer > .close { top: calc(10px + env(safe-area-inset-top)); background: rgba(28,28,32,.7); color: #fff; box-shadow: none; }
   #viewer .toast { bottom: 166px; }
+  /* Bigger touch targets */
+  .node .label { padding-top: 8px; padding-bottom: 8px; }
+  .node .caret { width: 32px; height: 36px; }
+  .link { padding: 6px 0; }
+  .pick { width: 26px; height: 26px; }
+  .heart { width: 34px; height: 34px; right: 40px; }
+  /* Shoot and collection cards: two smaller columns, so photos show sooner */
+  .fcards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .fcover { aspect-ratio: 1.2; }
+  .fbody { padding: 8px; }
+  .fbody strong { font-size: 13px; }
   /* Selection bar: one row that scrolls sideways; its menus open full width above it. */
   .bulk { left: 8px; right: 8px; width: auto; transform: none; flex-wrap: nowrap; gap: 8px; padding: 8px 10px; }
   .bulk-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -497,12 +515,12 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 /* Curation: stars, favorites, collections */
 .curate { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
 .stars { display: inline-flex; }
-.stars button { all: unset; cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; color: var(--line); }
+.stars button { all: unset; cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; color: var(--muted); }
 .stars button.on { color: #f5b400; }
 .stars:hover button { color: #f5b400; }
-.stars button:hover ~ button { color: var(--line); }
+.stars button:hover ~ button { color: var(--muted); }
 .stars button:focus-visible, .fav-btn:focus-visible { outline: 2px solid var(--select); border-radius: 4px; }
-.fav-btn { all: unset; cursor: pointer; font-size: 20px; line-height: 1; color: var(--line); }
+.fav-btn { all: unset; cursor: pointer; font-size: 20px; line-height: 1; color: var(--muted); }
 .fav-btn.on { color: #ff5a7a; }
 .curate .btn.small { margin-left: auto; }
 .in-collections { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
@@ -569,3 +587,9 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6p
 /* "Skip to photos": first stop for keyboard users, visible only when focused. */
 .skip-link { position: absolute; left: 8px; top: -40px; z-index: 30; padding: 8px 12px; border-radius: 8px; background: var(--text); color: var(--bg); text-decoration: none; }
 .skip-link:focus { top: 8px; }
+
+/* In-app confirm / prompt */
+dialog.ask { width: min(440px, 100vw - 32px); }
+.ask .hint { margin: 0; }
+.ask-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.btn.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }

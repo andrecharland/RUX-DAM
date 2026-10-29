@@ -38,6 +38,8 @@ export function renderViewerTags(asset) {
   };
 }
 
+const when = (t) => (t ? new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '');
+
 export function folderLabel(ancestors, i) {
   return ancestors.slice(0, i + 1).map((f) => f.name).join(' / ');
 }
@@ -49,7 +51,9 @@ export function renderRights(asset) {
       : 'default, no flag set';
   const current = $('r-current');
   current.className = `r-current ${r.status}`;
-  current.textContent = `${r.status === 'restricted' ? '⛔ Do not use' : '✓ Cleared'} (${where})` +
+  // With no flag anywhere above it, nothing has been decided: say so, rather
+  // than "cleared", which reads like an approval.
+  current.textContent = (r.source.scope === 'default' ? 'No restriction recorded' : `${r.status === 'restricted' ? '⛔ Do not use' : '✓ Cleared'} (${where})`) +
     (r.note ? ` — ${r.note}` : '') +
     (r.updatedAt ? ` · ${new Date(r.updatedAt).toLocaleDateString()}` : '');
 
@@ -168,10 +172,11 @@ export function open(asset) {
     ...(asset.kind === 'video' ? [['Duration', formatDuration(asset.durationMs) || '—']] : []),
     ['Creator', creatorOf(asset) || '— (add one under Metadata)'],
     ['Folder', [asset.collection, asset.path].filter(Boolean).join(' / ')],
-    ...(asset.takenTime ? [['Taken', new Date(asset.takenTime).toLocaleString()]] : []),
+    ...(asset.takenTime ? [['Taken', when(asset.takenTime)]] : []),
     ...(asset.camera ? [['Camera', asset.camera]] : []),
-    ['Added', asset.createdTime ? new Date(asset.createdTime).toLocaleString() : '—'],
-    ['Modified', new Date(asset.modifiedTime).toLocaleString()],
+    // Added to Drive only when there's no capture date; Modified only if it differs.
+    ...(!asset.takenTime && asset.createdTime ? [['Added', when(asset.createdTime)]] : []),
+    ...(asset.modifiedTime && when(asset.modifiedTime) !== when(asset.takenTime || asset.createdTime) ? [['Modified', when(asset.modifiedTime)]] : []),
   ];
   $('d-meta').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
   $('d-download').href = `${fileUrl}?download=1`;

@@ -40,14 +40,17 @@ export function titleRow(item, defaults, { showTitle = true } = {}) {
     ];
   }
   return [
-    el('span', { class: 'hint', text: 'Add Product, Format, Shoot date… to give this a title and a RUX file name.' }),
-    el('button', { type: 'button', class: 'link', text: 'Start from file details', onclick: async (e) => {
-      e.target.disabled = true;
-      try {
-        await applyTo([item.id])({ add: defaults() });
-      } catch (err) {
-        e.target.textContent = err.message;
-      }
-    } }),
+    el('button', {
+      type: 'button', class: 'link', text: 'Add a RUX file name',
+      title: 'Fills in Format, Shoot date and Aspect from the file; add a Product or Concept to finish the name',
+      onclick: async (e) => {
+        e.target.disabled = true;
+        try {
+          await applyTo([item.id])({ add: defaults() });
+        } catch (err) {
+          e.target.textContent = err.message;
+        }
+      },
+    }),
   ];
 }

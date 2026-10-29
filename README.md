@@ -250,7 +250,7 @@ A folder or file with any naming field of its own gets:
 Every field is optional. Each field uses the item's own values, else the ones inherited from its
 folders: files in a named shoot keep their Drive file name, while a final edit given its own
 Version gets a title with the shoot's Product and its own version. Change a tag and the title and
-name change with it; nothing in Drive is renamed. **Start from file details** fills in Format, Shoot
+name change with it; nothing in Drive is renamed. **Add a RUX file name** fills in Format, Shoot
 date and (for files) Aspect from Drive, or every part when the Drive name already follows the
 convention. Shoot dates are stored as YYYY-MM-DD and versions as plain numbers ("v2" becomes 2).
 

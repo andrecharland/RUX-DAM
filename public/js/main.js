@@ -1,4 +1,5 @@
 import { $, api, copyText, downloadZip, el, grid, state, viewer } from './core.js';
+import { ask } from './dialogs.js';
 import { favorite, loadCollections, rate } from './curation.js';
 import { clearAllFilters, renderChips } from './filters.js';
 import { folderUi, loadFolders, selectFolder, setFolderDetails } from './folders.js';
@@ -178,12 +179,16 @@ viewer.addEventListener('close', () => {
   writeUrl();
 });
 
-$('d-download').addEventListener('click', (e) => {
+// Restricted assets ask before downloading.
+$('d-download').addEventListener('click', async (e) => {
   const r = state.current?.rights;
-  if (r?.status === 'restricted' &&
-      !confirm(`This asset is marked Do not use${r.note ? `: ${r.note}` : ''}.\n\nDownload anyway?`)) {
-    e.preventDefault();
-  }
+  if (r?.status !== 'restricted' || e.target.dataset.confirmed) return;
+  e.preventDefault();
+  const yes = await ask({ title: 'This is marked “Do not use”', body: [r.note, 'Download it anyway?'], confirm: 'Download anyway', danger: true });
+  if (!yes) return;
+  e.target.dataset.confirmed = '1';
+  e.target.click();
+  delete e.target.dataset.confirmed;
 });
 
 $('r-save').addEventListener('click', () => {
@@ -243,6 +248,7 @@ $('toggle-side').addEventListener('click', (e) => {
   e.stopPropagation();
   document.body.classList.toggle('side-open');
 });
+$('side-close').addEventListener('click', () => document.body.classList.remove('side-open'));
 
 document.addEventListener('click', (e) => {
   if (document.body.classList.contains('side-open') && !e.target.closest('#side')) {

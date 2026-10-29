@@ -49,9 +49,9 @@ describe('tags, titles and Claude suggestions', { skip: !playwright && 'playwrig
   it('fills naming fields from file details', async () => {
     page = await browser.page();
     await page.goto(`${app.base}/?asset=f2`);
-    await page.waitForSelector('#d-label button:has-text("Start from file details")');
+    await page.waitForSelector('#d-label button:has-text("Add a RUX file name")');
     const drive = await page.textContent('#d-name');
-    await page.click('#d-label button:has-text("Start from file details")');
+    await page.click('#d-label button:has-text("Add a RUX file name")');
     await page.waitForFunction((name) => document.querySelector('#d-name').textContent !== name, drive);
     assert.match(await page.textContent('#d-name'), /Photo/);
     assert.match(await page.textContent('#d-label'), /Drive name: IMG_7002\.jpg/);

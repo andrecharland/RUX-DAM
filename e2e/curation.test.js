@@ -84,7 +84,7 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.waitForFunction((ids) => [...document.querySelectorAll('#grid .card')].map((c) => c.dataset.id).join() === ids, order.join());
     assert.strictEqual(await page.locator('.group-head').count(), 0, 'no month headings in a collection');
     assert.match(await page.textContent('#crumbs'), /Spring launch/);
-    assert.match(await page.textContent('#collection-panel'), /made by ana/);
+    assert.match(await page.textContent('#collection-panel'), /made by Ana/);
     await card(0).locator('.pick').click();
     await page.click('#bulk-uncollect');
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('3 '));

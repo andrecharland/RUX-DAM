@@ -1,4 +1,6 @@
 import { $, api, el, grid, state } from './core.js';
+import { ask } from './dialogs.js';
+import { toast } from './toast.js';
 import { loadFolders, renderFolderPanel } from './folders.js';
 import { afterEdit, card, load, reloadInPlace } from './grid.js';
 import { renderBulk } from './selection.js';
@@ -18,9 +20,9 @@ export async function refreshAi() {
   const batches = ai.batches || [];
   const busy = active || batches.length > 0;
   const bar = $('ai-status');
-  const cost = ai.costUsd != null ? ` · ≈ $${ai.costUsd.toFixed(2)} so far` : '';
+  const cost = ai.costUsd ? ` · ${ai.costUsd < 0.01 ? 'under 1 cent' : `≈ $${ai.costUsd.toFixed(2)}`} so far` : '';
   const stop = el('button', { type: 'button', class: 'link', text: 'Stop', onclick: async () => {
-    if (!confirm('Stop suggesting tags? Photos already done keep their suggestions.')) return;
+    if (!await ask({ title: 'Stop suggesting tags?', body: 'Photos already done keep their suggestions.', confirm: 'Stop' })) return;
     await api('/api/suggest/cancel', {});
     refreshAi();
   } });
@@ -64,17 +66,23 @@ export async function queueSuggestions(body, count) {
   const each = state.ai.estimatePerImage;
   const batch = count > (state.ai.batchMin ?? 50);
   const total = each ? each * count * (batch ? 0.5 : 1) : null;
-  const estimate = total != null ? ` Estimated cost: about $${total < 0.01 ? total.toFixed(3) : total.toFixed(2)}.` : '';
+  const estimate = total != null ? ` Estimated cost: ${total < 0.01 ? 'under 1 cent' : `about $${total.toFixed(2)}`}.` : '';
   const how = batch
     ? 'More than 50 photos run as a batch at half price. Results usually arrive within an hour (at most 24 hours), and you can close this page meanwhile.'
     : 'They run right away.';
-  if (!confirm(`Ask Claude to suggest tags for up to ${count.toLocaleString()} photos?${estimate}\n\n${how}\n\nPhotos that already have suggestions are skipped. You review everything before it becomes a tag.`)) return;
+  const yes = await ask({
+    title: `Suggest tags for ${count === 1 ? '1 photo' : `up to ${count.toLocaleString()} photos`}?`,
+    body: [`${how}${estimate}`, 'Photos that already have suggestions are skipped. You review everything before it becomes a tag.'],
+    confirm: 'Ask Claude',
+  });
+  if (!yes) return;
   try {
     const res = await api('/api/suggest', body);
-    if (!res.added) alert('Nothing to do: these photos already have suggestions (or have no preview).');
+    toast(res.added ? `Claude is looking at ${res.added.toLocaleString()} photo${res.added === 1 ? '' : 's'}`
+      : 'Nothing to do: these photos already have suggestions (or have no preview).');
     state.aiWasBusy = state.aiWasBusy || res.added > 0;
   } catch (err) {
-    alert(err.message);
+    toast(err.message);
   }
   refreshAi();
 }
