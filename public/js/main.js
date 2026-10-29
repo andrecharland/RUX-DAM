@@ -33,11 +33,20 @@ grid.addEventListener('click', (e) => {
   }
 });
 
+// Keyboard on a focused tile: Enter opens it, Space selects it, F favorites it.
+// (Each tile is one tab stop; its checkbox and heart are for the mouse.)
 grid.addEventListener('keydown', (e) => {
   const target = e.target.closest('.card');
-  if (target && e.target === target && (e.key === 'Enter' || e.key === ' ')) {
+  if (!target || e.target !== target || target.classList.contains('ghost')) return;
+  if (e.key === 'Enter') {
     e.preventDefault();
     target.click();
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    pick(target.dataset.id, e.shiftKey);
+  } else if (e.key === 'f' || e.key === 'F') {
+    const asset = state.items.get(target.dataset.id);
+    favorite([asset.id], !asset.favorite);
   }
 });
 
@@ -301,6 +310,10 @@ $('p-drive').addEventListener('click', () => state.current && showVideo(state.cu
 // Pop-up menus (Filter & sort, account, the folder's Suggest menu) close on a
 // click elsewhere or Escape, and only one is open at a time.
 const menus = () => document.querySelectorAll('details.menu[open]');
+// A confirmation would cover an opening menu: it gives way.
+document.addEventListener('toggle', (e) => {
+  if (e.target.matches?.('details.menu') && e.target.open) $('toast').hidden = true;
+}, true);
 document.addEventListener('click', (e) => {
   for (const menu of menus()) if (!menu.contains(e.target)) menu.open = false;
 });

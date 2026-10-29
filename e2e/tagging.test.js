@@ -28,14 +28,19 @@ describe('tags, titles and Claude suggestions', { skip: !playwright && 'playwrig
     await page.fill('#folder-editor .add-row input', 'Gear Box 70L');
     await page.keyboard.press('Enter');
     await page.waitForSelector('#folder-editor .chip:has-text("Gear Box 70L")');
+    // A Product alone is an everyday tag: the folder keeps its Drive name.
+    assert.match(await page.textContent('#crumbs'), /Roof rack v2/);
     await page.selectOption('#folder-editor select', 'shoot_date');
     assert.strictEqual(await page.getAttribute('#folder-editor .add-row input', 'type'), 'date');
+    await page.fill('#folder-editor .add-row input', '2026-09-12');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#folder-editor .chip:has-text("2026-09-12")');
     await page.click('#folder-editor button:has-text("Done")');
     assert.ok(await page.isHidden('#folder-editor .add-row'));
-    // A naming field of its own gives the folder a title and a RUX_ name.
-    await page.waitForFunction(() => document.querySelector('#crumbs').textContent.includes('Gear Box 70L'));
-    assert.match(await page.textContent('#folder-label'), /RUX_GearBox70L/);
-    assert.match(await page.textContent('#ft-summary'), /1 tag/);
+    // A naming-only field (here Shoot date) gives the folder a title and a RUX_ name.
+    await page.waitForFunction(() => document.querySelector('#crumbs').textContent.includes('Gear Box 70L · Sep 12, 2026'));
+    assert.match(await page.textContent('#folder-label'), /RUX_GearBox70L_2026-09-12/);
+    assert.match(await page.textContent('#ft-summary'), /2 tags/);
     // Everything inside inherits the tag.
     await page.click('#grid .card >> nth=0');
     await page.waitForSelector('#d-tags .chip.inherited:has-text("Gear Box 70L")');

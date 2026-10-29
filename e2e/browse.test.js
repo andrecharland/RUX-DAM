@@ -127,6 +127,21 @@ describe('browsing and search', { skip: !playwright && 'playwright is not instal
     await page.waitForFunction(() => !document.querySelector('#shortcuts').open);
   });
 
+  it('works from the keyboard: one stop per tile, Space selects, Enter opens', async () => {
+    await fresh();
+    await page.focus('#grid .card');
+    await page.keyboard.press('Tab');
+    assert.strictEqual(await page.evaluate(() => document.activeElement.classList.contains('card')), true, 'next tile, not its checkbox');
+    await page.keyboard.press('Space');
+    await page.waitForSelector('#bulk:not([hidden])');
+    assert.strictEqual(await page.textContent('#bulk-count'), '1 selected');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.getElementById('bulk').hidden);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#viewer[open]');
+    await page.keyboard.press('Escape');
+  });
+
   it('jumps to a year and resizes tiles with the slider', async () => {
     await fresh();
     await page.click('#scrubber button:has-text("2024")');

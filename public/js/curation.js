@@ -1,5 +1,6 @@
 import { $, api, copyText, downloadZip, el, grid, plural, state, viewer } from './core.js';
 import { DPR, thumbUrl } from './previews.js';
+import { clearAllFilters } from './filters.js';
 import { restoreEach, toast } from './toast.js';
 import { renderCrumbs, renderFolderPanel, renderTree, selectFolder } from './folders.js';
 import { load, reloadInPlace } from './grid.js';
@@ -36,7 +37,10 @@ export function renderCollections() {
   );
 }
 
+// Opening a collection (or My favorites) starts from all of it: any search or
+// filter from before is cleared, so nothing in it is unexpectedly hidden.
 export function selectCollection(id, fav = false) {
+  clearAllFilters();
   state.folder = '';
   state.collection = id;
   state.fav = fav ? '1' : '';
@@ -107,7 +111,7 @@ export function renderCollectionPanel() {
       ]),
       el('div', { class: 'ft-actions' }, [
         c.count ? el('button', { type: 'button', class: 'btn ghost small', text: 'Download all', onclick: () => downloadZip(c.items, c.name) }) : '',
-        el('button', { type: 'button', class: 'btn ghost small', text: 'Copy link', onclick: (e) => copyText(e.target, location.href) }),
+        el('button', { type: 'button', class: 'btn ghost small', text: 'Copy link', onclick: (e) => copyText(e.target, `${location.origin}/?collection=${encodeURIComponent(c.id)}`) }),
         el('button', { type: 'button', class: 'btn ghost small danger', text: 'Delete', onclick: async () => {
           if (!confirm(`Delete the collection “${c.name}”? The photos and videos themselves aren’t affected.`)) return;
           await api(url, { delete: true });
@@ -247,6 +251,7 @@ export function renderCurate(asset) {
   $('d-stars').replaceChildren(...[1, 2, 3, 4, 5].map((n) => el('button', {
     type: 'button', class: n <= rating ? 'on' : '', text: '★', 'aria-pressed': String(n <= rating),
     title: n === rating ? 'Clear rating (0)' : `${plural(n, 'star')} (${n})`,
+    'aria-label': n === rating ? `Rated ${plural(n, 'star')}; clear rating` : `Rate ${plural(n, 'star')}`,
     onclick: () => rate([asset.id], n === rating ? 0 : n),
   })));
   const fav = $('d-fav');

@@ -28,6 +28,10 @@ const DEFAULT_FIELDS = [
 
 // Fields that make up a title and RUX_ name, in naming order.
 const NAME_FIELDS = ['product', 'concept', 'format', 'aspect', 'creator', 'shoot_date', 'version'];
+// The ones only used for naming: an item gets a title once it has one of these
+// of its own. Product and Creator are everyday tags too (and Claude suggests
+// them), so on their own they don't rename anything.
+const TITLE_FIELDS = ['concept', 'format', 'aspect', 'shoot_date', 'version'];
 
 // Shoot dates are stored as YYYY-MM-DD, versions as a plain number, aspects as 9x16.
 function normalize(key, value) {
@@ -203,13 +207,13 @@ class TagStore {
     }
   }
 
-  // { title, name } for a file or folder ({ id, ancestors }) with naming fields
-  // of its own; null otherwise. Each field uses the item's own values, else the
+  // { title, name } for a file or folder ({ id, ancestors }) with naming-only
+  // fields (TITLE_FIELDS) of its own; null otherwise. Each field uses the item's own values, else the
   // inherited ones, so a final edit with its own Version 3 keeps the shoot's
   // Product but not its Version 1.
   label(item) {
     const own = this.data.tags[item.id] || {};
-    if (!NAME_FIELDS.some((k) => own[k]?.length)) return null;
+    if (!TITLE_FIELDS.some((k) => own[k]?.length)) return null;
     const tags = this.resolve(item);
     return naming.describe(Object.fromEntries(NAME_FIELDS.map((k) => [k,
       own[k]?.length ? own[k] : (tags[k] || []).map((t) => t.value)])));

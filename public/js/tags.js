@@ -74,7 +74,8 @@ export function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No meta
     collapsible && el('button', { class: 'btn ghost', type: 'button', text: 'Done', onclick: () => { addRow.hidden = true; root.onclose?.(); } }),
   ].filter(Boolean));
   root.append(addRow, msg);
-  root.openAdd = () => { addRow.hidden = false; select.focus(); };
+  // Focus goes to the value box (the field list sits just before it).
+  root.openAdd = () => { addRow.hidden = false; input.focus(); };
   return root;
 }
 

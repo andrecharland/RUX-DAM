@@ -41,6 +41,9 @@ body {
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 [hidden] { display: none !important; }
+/* One visible focus ring for every control, including the ones styled from
+   scratch with "all: unset". */
+:is(button, a, summary, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--select); outline-offset: 2px; }
 
 input, select, button, .btn { font: inherit; color: var(--text); }
 .bar input, .bar select, .bar button, .btn, .editor input, .editor select, .r-field input, .r-field select {
@@ -404,6 +407,12 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
   .sheet-toggle span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
   .viewer > .close { top: calc(10px + env(safe-area-inset-top)); background: rgba(28,28,32,.7); color: #fff; box-shadow: none; }
   #viewer .toast { bottom: 166px; }
+  /* Selection bar: one row that scrolls sideways; its menus open full width above it. */
+  .bulk { left: 8px; right: 8px; width: auto; transform: none; flex-wrap: nowrap; gap: 8px; padding: 8px 10px; }
+  .bulk-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .bulk-actions .btn, .bulk-actions summary { white-space: nowrap; }
+  #bulk-count { white-space: nowrap; }
+  .bulk .menu.up .menu-pop { position: fixed; left: 8px; right: 8px; bottom: 72px; width: auto; }
 }
 .sheet-toggle { display: none; }
 @media (max-width: 720px) { .sheet-toggle { display: grid; } }
@@ -556,3 +565,7 @@ body.selecting .toast { bottom: 96px; }
 .vocab-body h3 { margin: 8px 0 0; font-size: 14px; }
 kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2px 6px; border: 1px solid var(--line);
   border-bottom-width: 2px; border-radius: 5px; background: var(--bg); }
+
+/* "Skip to photos": first stop for keyboard users, visible only when focused. */
+.skip-link { position: absolute; left: 8px; top: -40px; z-index: 30; padding: 8px 12px; border-radius: 8px; background: var(--text); color: var(--bg); text-decoration: none; }
+.skip-link:focus { top: 8px; }

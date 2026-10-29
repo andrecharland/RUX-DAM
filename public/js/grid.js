@@ -25,7 +25,7 @@ export function card(asset) {
     tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset), draggable: canReorder() ? 'true' : false,
     style: `--ar: ${ar.toFixed(3)}${asset.color ? `; background-color: ${asset.color}` : ''}`,
   }, [
-    el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected }),
+    el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected, tabindex: -1 }),
     asset.hasThumbnail
       ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '', onload: (e) => sampleColor(asset, e.target) })
       : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
@@ -33,7 +33,7 @@ export function card(asset) {
     asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',
     asset.suggestions?.count ? el('span', { class: 'ai-dot', text: `✨ ${asset.suggestions.count}`, title: 'Suggestions from Claude to review' }) : '',
     el('button', {
-      type: 'button', class: `heart${asset.favorite ? ' on' : ''}`, text: '♥', 'aria-pressed': String(Boolean(asset.favorite)),
+      type: 'button', class: `heart${asset.favorite ? ' on' : ''}`, text: '♥', 'aria-pressed': String(Boolean(asset.favorite)), tabindex: -1,
       'aria-label': asset.favorite ? 'Remove from my favorites' : 'Add to my favorites',
     }),
     asset.rating ? el('span', { class: 'stars-badge', text: '★'.repeat(asset.rating), title: `${asset.rating} star${asset.rating === 1 ? '' : 's'}` }) : '',

@@ -50,7 +50,10 @@ export function renderTree() {
           'aria-label': open ? 'Collapse' : 'Expand',
           onclick: () => { state.expanded[open ? 'delete' : 'add'](f.id); renderTree(); },
         }),
-        el('button', { type: 'button', class: 'label', title: f.label ? `${f.label.name}\nDrive folder: ${f.path || f.name}` : f.path || f.name, onclick: () => selectFolder(f.id) }, [
+        el('button', {
+          type: 'button', class: 'label', 'aria-current': f.id === state.folder ? 'page' : false,
+          title: f.label ? `${f.label.name}\nDrive folder: ${f.path || f.name}` : f.path || f.name, onclick: () => selectFolder(f.id),
+        }, [
           el('span', { text: displayName(f) }),
           hasTags && el('span', { class: 'dot', title: 'This folder has tags', text: '●' }),
           el('span', { class: 'count', text: f.count.toLocaleString() }),
