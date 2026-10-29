@@ -12,26 +12,33 @@ function readCookies(req) {
   const out = {};
   for (const part of (req.get('cookie') || '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i <= 0) continue;
+    try {
+      out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    } catch {
+      // Not valid percent-encoding: ignore the cookie.
+    }
   }
   return out;
 }
 
-// Signed (HMAC) cookie values, so a session can't be forged or edited.
-function sign(secret, data) {
-  const body = Buffer.from(JSON.stringify(data)).toString('base64url');
+// Signed (HMAC) cookie values, so a session can't be forged or edited. Each
+// carries its purpose (`typ`), so one kind (the short-lived sign-in state)
+// can never be used as another (a session).
+function sign(secret, typ, data) {
+  const body = Buffer.from(JSON.stringify({ ...data, typ })).toString('base64url');
   const mac = crypto.createHmac('sha256', secret).update(body).digest('base64url');
   return `${body}.${mac}`;
 }
 
-function verify(secret, value) {
+function verify(secret, typ, value) {
   const [body, mac] = String(value || '').split('.');
   if (!body || !mac) return null;
   const expected = crypto.createHmac('sha256', secret).update(body).digest('base64url');
   if (mac.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
   try {
     const data = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return data.exp > Date.now() ? data : null;
+    return data.typ === typ && data.exp > Date.now() ? data : null;
   } catch {
     return null;
   }
@@ -75,7 +82,7 @@ function googleSignIn({
 
   router.get('/auth/login', (req, res) => {
     const state = crypto.randomBytes(16).toString('base64url');
-    res.set('Set-Cookie', cookie(req, STATE_COOKIE, sign(sessionSecret, {
+    res.set('Set-Cookie', cookie(req, STATE_COOKIE, sign(sessionSecret, 'state', {
       state, next: safeNext(req.query.next), exp: Date.now() + 10 * 60e3,
     }), 600));
     res.redirect(oauth.generateAuthUrl({
@@ -89,7 +96,7 @@ function googleSignIn({
   });
 
   router.get('/auth/callback', async (req, res) => {
-    const saved = verify(sessionSecret, readCookies(req)[STATE_COOKIE]);
+    const saved = verify(sessionSecret, 'state', readCookies(req)[STATE_COOKIE]);
     if (!saved || saved.state !== req.query.state || !req.query.code) {
       return res.status(400).send(page('Sign-in expired', '<h1>Sign-in expired</h1><p>Please try again.</p><a class="btn" href="/auth/login">Sign in with Google</a>'));
     }
@@ -108,8 +115,8 @@ function googleSignIn({
       const who = domains.length ? `an @${domains.join(' or @')} Google account` : 'an approved Google account';
       return res.status(403).send(page('No access', `<h1>No access</h1><p>You're signed in as <strong>${escape(payload?.email || 'unknown')}</strong>. RUX Assets needs ${escape(who)}.</p><a class="btn" href="/auth/login">Use another account</a>`));
     }
-    const session = sign(sessionSecret, {
-      email: payload.email, name: payload.name || '', exp: Date.now() + SESSION_DAYS * 864e5,
+    const session = sign(sessionSecret, 'session', {
+      email: payload.email, name: payload.name || '', hd: payload.hd || '', exp: Date.now() + SESSION_DAYS * 864e5,
     });
     res.set('Set-Cookie', [clear, cookie(req, SESSION_COOKIE, session, SESSION_DAYS * 86400)]);
     res.redirect(safeNext(saved.next));
@@ -121,9 +128,11 @@ function googleSignIn({
   });
 
   // Everything else needs a session: pages redirect to sign-in, API calls get 401.
+  // The account is checked against the allowed domains and emails on every
+  // request, so removing someone from them takes effect straight away.
   const requireUser = (req, res, next) => {
-    const user = verify(sessionSecret, readCookies(req)[SESSION_COOKIE]);
-    if (user) {
+    const user = verify(sessionSecret, 'session', readCookies(req)[SESSION_COOKIE]);
+    if (user && typeof user.email === 'string' && allowed({ email: user.email, email_verified: true, hd: user.hd })) {
       req.user = { email: user.email, name: user.name };
       return next();
     }

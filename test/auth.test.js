@@ -103,7 +103,30 @@ test('rejects forged sessions, bad state, and off-site redirects', async () => {
 
     const { res } = await t.signInAs('staff', '//evil.com/phish');
     assert.strictEqual(res.headers.get('location'), '/');
+
+    // The sign-in state cookie anyone can get from /auth/login is not a session.
+    const state = (await t.get('/auth/login')).headers.getSetCookie()[0].split(';')[0].split('=')[1];
+    assert.strictEqual((await t.get('/api/assets', `dam_session=${state}`)).status, 401);
+    assert.strictEqual((await t.get('/api/me', `dam_session=${state}`)).status, 401);
+    // Malformed cookies are ignored, not errors.
+    assert.strictEqual((await t.get('/api/assets', 'dam_session=%E0%A4%A')).status, 401);
   } finally {
     t.server.close();
+  }
+});
+
+test('sessions end when the account is no longer allowed', async () => {
+  const t = await setup();
+  const { cookie } = await t.signInAs('freelancer');
+  t.server.close();
+  // Same secret, but pat@studio.com has been removed from ALLOWED_EMAILS.
+  const library = new Library({ crawl: async () => ({ assets: [], folders: [] }) }, ['root'], { tags: new TagStore({ log: quiet }), log: quiet });
+  const signIn = googleSignIn({ clientId: 'cid', sessionSecret: 'test-secret', allowedDomains: ['rux.life'], client: fakeGoogle });
+  const server = createApp({ library, drive: {}, signIn }).listen(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/api/assets`, { headers: { cookie } });
+    assert.strictEqual(res.status, 401);
+  } finally {
+    server.close();
   }
 });
