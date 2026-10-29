@@ -252,10 +252,12 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
 .viewer > .close:hover { background: var(--line); }
 .stage-col { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #000; position: relative; }
 .stage { flex: 1; min-height: 0; background: #000; display: grid; place-items: center; position: relative; overflow: hidden; }
-.stage img, .stage video { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* Absolutely placed so max-height resolves against the stage, not the image's own height:
+   the whole photo fits on screen at any size. */
+.stage > img, .stage > video { position: absolute; inset: 0; margin: auto; max-width: 100%; max-height: 100%; }
 .stage.zoomed { display: block; overflow: auto; cursor: grab; }
 .stage.zoomed.dragging { cursor: grabbing; }
-.stage.zoomed img { max-width: none; max-height: none; display: block; margin: auto; }
+.stage.zoomed img { position: static; max-width: none; max-height: none; display: block; margin: auto; }
 .nav-btn {
   position: absolute; top: calc(50% - 60px); width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer;
   background: rgba(28,28,32,.85); color: #ececef; display: grid; place-items: center; z-index: 2;
