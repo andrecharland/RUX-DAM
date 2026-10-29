@@ -170,6 +170,7 @@ class Library {
     return {
       ...asset,
       format: formatOf(asset),
+      label: this.tags.label(asset.id),
       rights: this.rights.resolve(asset),
       tags,
       ownTags: this.tags.own(asset.id),
@@ -191,6 +192,7 @@ class Library {
       ancestors: f.ancestors,
       count: counts.get(f.id) || 0,
       tags: this.tags.own(f.id),
+      label: this.tags.label(f.id),
       rights: this.rights.get(f.id),
       suggestions: this.suggestions.resolve(f.id, this.tags.resolve(f)),
     }));
@@ -226,7 +228,10 @@ class Library {
       if (terms.length) {
         const values = Object.values(view.tags).flat().map((t) => t.value).join(' ');
         const description = view.suggestions?.description || '';
-        const haystack = (`${a.name} ${a.collection} ${a.path} ${values} ${description} ` +
+        // Folder labels count for everything inside them.
+        const labels = [view.label, ...a.ancestors.map((f) => this.tags.label(f.id))]
+          .filter(Boolean).map((l) => l.name).join(' ');
+        const haystack = (`${a.name} ${a.collection} ${a.path} ${values} ${description} ${labels} ` +
           `${props.format} ${props.year || ''} ${props.camera || ''} ${props.orientation || ''}`).toLowerCase();
         if (!terms.every((t) => haystack.includes(t))) continue;
       }

@@ -85,6 +85,7 @@
       </div>
       <nav id="crumbs" class="crumbs" aria-label="Folder"></nav>
       <section id="folder-tags" class="folder-tags" hidden>
+        <div id="folder-label" class="label-row"></div>
         <p class="hint">Tags on this folder apply to all <strong id="folder-count"></strong> assets inside it.</p>
         <div id="folder-editor"></div>
         <div id="folder-ai" class="folder-ai"></div>
@@ -117,6 +118,7 @@
       <aside class="details">
         <button id="close" class="close" type="button" aria-label="Close">×</button>
         <h2 id="d-name"></h2>
+        <div id="d-label" class="label-row"></div>
         <dl id="d-meta"></dl>
         <div class="actions">
           <a id="d-download" class="btn">Download</a>
@@ -175,6 +177,32 @@
     </div>
   </dialog>
 
+  <dialog id="label-dialog" class="vocab">
+    <form class="vocab-body" id="lb-form" method="dialog">
+      <button id="lb-close" class="close" type="button" aria-label="Close">×</button>
+      <h2>Label</h2>
+      <p class="hint" id="lb-for"></p>
+      <div class="lb-grid">
+        <label class="r-field">Product <input id="lb-product" list="dl-product" autocomplete="off"></label>
+        <label class="r-field">Concept family <input id="lb-concept" list="dl-concept" autocomplete="off"></label>
+        <label class="r-field">Format <input id="lb-format" list="dl-format" autocomplete="off"></label>
+        <label class="r-field">Aspect <input id="lb-aspect" list="dl-aspect" autocomplete="off" placeholder="9x16"></label>
+        <label class="r-field">Creator <input id="lb-creator" list="dl-creator" autocomplete="off"></label>
+        <label class="r-field">Date <input id="lb-date" type="date"></label>
+        <label class="r-field">Version <input id="lb-version" type="number" min="1" max="999" step="1"></label>
+      </div>
+      <p class="hint">Name</p>
+      <code id="lb-preview" class="lb-preview"></code>
+      <p id="lb-msg" class="lb-msg" role="status"></p>
+      <div class="r-buttons">
+        <button id="lb-save" class="btn" type="submit">Save label</button>
+        <button id="lb-remove" class="btn ghost" type="button">Remove label</button>
+        <button id="lb-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/naming.js"></script>
   <script src="/shopify.js"></script>
   <script src="/app.js"></script>
 </body>

@@ -232,8 +232,8 @@ function renderTree() {
           'aria-label': open ? 'Collapse' : 'Expand',
           onclick: () => { state.expanded[open ? 'delete' : 'add'](f.id); renderTree(); },
         }),
-        el('button', { type: 'button', class: 'label', title: f.path || f.name, onclick: () => selectFolder(f.id) }, [
-          el('span', { text: f.name }),
+        el('button', { type: 'button', class: 'label', title: f.label ? `${f.label.name}\nDrive folder: ${f.path || f.name}` : f.path || f.name, onclick: () => selectFolder(f.id) }, [
+          el('span', { text: displayName(f) }),
           hasTags && el('span', { class: 'dot', title: 'This folder has tags', text: '●' }),
           el('span', { class: 'count', text: f.count.toLocaleString() }),
         ].filter(Boolean)),
@@ -270,7 +270,7 @@ function renderCrumbs() {
   if (folder) {
     for (const a of [...folder.ancestors, folder]) {
       parts.push(el('span', { class: 'sep', text: '›' }));
-      parts.push(el('button', { type: 'button', text: a.name, onclick: () => selectFolder(a.id) }));
+      parts.push(el('button', { type: 'button', text: displayName(state.folders.get(a.id) || a), onclick: () => selectFolder(a.id) }));
     }
   }
   $('crumbs').replaceChildren(...parts);
@@ -281,6 +281,9 @@ function renderFolderPanel() {
   $('folder-tags').hidden = !folder;
   if (!folder) return;
   $('folder-count').textContent = folder.count.toLocaleString();
+  $('folder-label').replaceChildren(...labelRow(folder, () => openLabelEditor(folder, {
+    kind: 'folder', tags: folderTags(folder),
+  })));
   // Effective tags: inherited from enclosing folders, then this folder's own.
   const tags = {};
   const add = (own, from) => {
@@ -344,7 +347,7 @@ function card(asset) {
     el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${asset.name}`, checked: selected }),
     thumb,
     el('div', { class: 'caption' }, [
-      el('div', { class: 'name', text: asset.name, title: asset.name }),
+      el('div', { class: 'name', text: displayName(asset), title: asset.label ? `${asset.label.name}\nDrive file: ${asset.name}` : asset.name }),
       el('div', { class: 'path', text: [asset.collection, asset.path].filter(Boolean).join(' / ') }),
       values.length ? el('div', { class: 'chips-line', text: values.join(' · '), title: values.join(', ') }) : '',
       asset.suggestions?.count ? el('div', {
@@ -435,6 +438,7 @@ async function afterEdit() {
   if (viewer.open && state.current) {
     const fresh = await api(`/api/assets/${state.current.id}`);
     state.current = fresh;
+    renderViewerLabel(fresh);
     renderSuggestions(fresh);
     renderViewerTags(fresh);
     renderRights(fresh);
@@ -481,7 +485,7 @@ function facetGroup({ key, label, counts, selected, order, onToggle }) {
 
 const FILE_FACETS = [
   { key: 'year', label: 'Year taken', order: 'desc' },
-  { key: 'format', label: 'Format' },
+  { key: 'format', label: 'File type' },
   { key: 'orientation', label: 'Orientation' },
   { key: 'resolution', label: 'Resolution' },
   { key: 'size', label: 'File size' },
@@ -677,6 +681,119 @@ function renderSuggestions(asset) {
   }));
 }
 
+// ---------- labels (RUX naming convention) ----------
+
+const displayName = (item) => item.label?.name || item.name;
+
+// Effective tags of a folder: inherited from enclosing folders, then its own.
+function folderTags(folder) {
+  const tags = {};
+  for (const f of [...folder.ancestors.map((a) => state.folders.get(a.id)), folder]) {
+    for (const [key, values] of Object.entries(f?.tags || {})) {
+      for (const value of values) (tags[key] ||= []).push({ value });
+    }
+  }
+  return tags;
+}
+
+// The label line under a name: the label (or "No label") and an edit button.
+// `showName: false` when the label is already the heading above it.
+function labelRow(item, onEdit, { showName = true } = {}) {
+  return item.label
+    ? [
+      showName ? el('code', { text: item.label.name, title: 'Label' }) : '',
+      el('button', { type: 'button', class: 'link', text: 'Edit label', onclick: onEdit }),
+      el('span', { class: 'drive-name', text: `Drive name: ${item.name}` }),
+    ]
+    : [
+      el('span', { class: 'hint', text: 'No label' }),
+      el('button', { type: 'button', class: 'link', text: 'Add label', onclick: onEdit }),
+    ];
+}
+
+function renderViewerLabel(asset) {
+  $('d-name').textContent = displayName(asset);
+  $('d-label').replaceChildren(...labelRow(asset, () => openLabelEditor(asset, {
+    kind: 'file', tags: asset.tags, width: asset.width, height: asset.height, date: asset.takenTime || asset.createdTime,
+  }), { showName: false }));
+}
+
+const LABEL_INPUTS = ['product', 'concept', 'format', 'aspect', 'creator', 'date', 'version'];
+const labelEdit = { item: null };
+
+// Starting values: the current label; else the Drive name if it already follows
+// the convention; else the item's tags, its pixel aspect and its date.
+function labelDefaults(item, { tags = {}, width, height, date } = {}) {
+  if (item.label) return { ...item.label.parts };
+  const parsed = RuxNaming.parse(item.name);
+  const fromVocab = (key, written, toToken) => state.fields.find((f) => f.key === key)?.values
+    .find((v) => toToken(v) === written) || written;
+  if (parsed) {
+    return {
+      ...parsed,
+      product: fromVocab('product', parsed.product, RuxNaming.productToken),
+      concept: fromVocab('concept', parsed.concept, RuxNaming.token),
+      format: fromVocab('format', parsed.format, RuxNaming.token),
+      creator: fromVocab('creator', parsed.creator, RuxNaming.token),
+    };
+  }
+  const first = (key) => tags[key]?.[0]?.value || '';
+  return {
+    product: first('product'),
+    concept: first('concept'),
+    format: first('format'),
+    aspect: first('aspect') || RuxNaming.aspectOf(width, height),
+    creator: first('creator'),
+    date: (date || new Date().toISOString()).slice(0, 10),
+    version: 1,
+  };
+}
+
+function updateLabelPreview() {
+  const parts = Object.fromEntries(LABEL_INPUTS.map((k) => [k, $(`lb-${k}`).value]));
+  const { name, errors } = RuxNaming.compose(parts);
+  $('lb-preview').textContent = name || 'RUX_…';
+  $('lb-msg').textContent = name ? '' : Object.values(errors)[0];
+  $('lb-save').disabled = !name;
+  return parts;
+}
+
+function openLabelEditor(item, context) {
+  labelEdit.item = item;
+  const values = labelDefaults(item, context);
+  for (const k of LABEL_INPUTS) $(`lb-${k}`).value = values[k] ?? '';
+  $('lb-for').textContent = `${context.kind === 'folder' ? 'Folder' : 'File'} in Drive: ${item.name}. ` +
+    'The label is shown in place of the Drive name and nothing in Drive changes. Its parts are added as tags' +
+    (context.kind === 'folder' ? ', so everything in the folder gets them.' : '.');
+  $('lb-remove').hidden = !item.label;
+  updateLabelPreview();
+  $('label-dialog').showModal();
+}
+
+for (const k of LABEL_INPUTS) $(`lb-${k}`).addEventListener('input', updateLabelPreview);
+for (const id of ['lb-close', 'lb-cancel']) $(id).addEventListener('click', () => $('label-dialog').close());
+// Save label is the form's submit button, so Enter in any field saves too.
+$('lb-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if ($('lb-save').disabled) return;
+  try {
+    await api(`/api/labels/${encodeURIComponent(labelEdit.item.id)}`, { parts: updateLabelPreview() });
+    $('label-dialog').close();
+    await afterEdit();
+  } catch (err) {
+    $('lb-msg').textContent = err.message;
+  }
+});
+$('lb-remove').addEventListener('click', async () => {
+  try {
+    await api(`/api/labels/${encodeURIComponent(labelEdit.item.id)}`, { remove: true });
+    $('label-dialog').close();
+    await afterEdit();
+  } catch (err) {
+    $('lb-msg').textContent = err.message;
+  }
+});
+
 // ---------- viewer ----------
 
 function renderViewerTags(asset) {
@@ -748,7 +865,7 @@ function open(asset) {
   $('stage').replaceChildren(asset.kind === 'video'
     ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview })
     : image);
-  $('d-name').textContent = asset.name;
+  renderViewerLabel(asset);
   const rows = [
     ['Format', `${asset.format || ''} (${asset.mimeType})`.replace(/^ \(/, '(')],
     ['Size', formatBytes(asset.size)],

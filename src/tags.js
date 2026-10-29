@@ -1,6 +1,7 @@
 'use strict';
 
 const { JsonStore } = require('./store');
+const naming = require('../public/naming');
 
 const DEFAULT_FIELDS = [
   { key: 'product', label: 'Product' },
@@ -12,7 +13,15 @@ const DEFAULT_FIELDS = [
   { key: 'location', label: 'Location' },
   { key: 'people', label: 'People' },
   { key: 'tags', label: 'Tags' },
+  // From the RUX Paid Social Creative Playbook (also the parts of a label).
+  { key: 'concept', label: 'Concept family', suggest: ['Product-in-Context', 'System/Stack', 'Proof', 'Lifestyle/Emotional', 'Social Proof'] },
+  { key: 'format', label: 'Format', suggest: ['Carousel', 'Feed Video', 'Reels', 'Static'] },
+  { key: 'aspect', label: 'Aspect', suggest: ['9x16', '4x5', '1x1', '1.91x1', '16x9', '4x1'] },
+  { key: 'creator', label: 'Creator' },
 ];
+
+// Label parts that are also tag fields.
+const LABEL_FIELDS = ['product', 'concept', 'format', 'aspect', 'creator'];
 
 const MAX_VALUE = 80;
 const MAX_VALUES = 50;
@@ -22,13 +31,15 @@ function slugify(label) {
 }
 
 // Metadata fields and the values set on Drive files and folders, stored as tags.json:
-//   { fields: [{ key, label, suggest? }], tags: { [id]: { [fieldKey]: [value, …] } } }
-// Values set on a folder apply to everything inside it.
+//   { fields: [{ key, label, suggest? }], tags: { [id]: { [fieldKey]: [value, …] } },
+//     labels: { [id]: { name, parts, updatedAt } } }
+// Values set on a folder apply to everything inside it. A label is a name in the
+// RUX naming convention, shown in place of the Drive name; its parts are tags too.
 class TagStore {
   constructor({ auth, bucket, object = 'tags.json', log = console } = {}) {
     this.store = new JsonStore({
       auth, bucket, object, log,
-      empty: () => ({ fields: DEFAULT_FIELDS.map((f) => ({ ...f })), tags: {} }),
+      empty: () => ({ fields: DEFAULT_FIELDS.map((f) => ({ ...f })), tags: {}, labels: {} }),
     });
   }
 
@@ -40,8 +51,13 @@ class TagStore {
     return this.store.data;
   }
 
-  load() {
-    return this.store.load();
+  // Fields added to the defaults since a tags.json was first saved are added
+  // to it here (and saved with the next change).
+  async load() {
+    await this.store.load();
+    for (const f of DEFAULT_FIELDS) {
+      if (!this.data.fields.some((x) => x.key === f.key)) this.data.fields.push({ ...f });
+    }
   }
 
   fieldKeys() {
@@ -106,46 +122,88 @@ class TagStore {
 
   // Applies a different change to each item, as one save: [{ id, add, remove }].
   async applyEach(changes) {
+    changes = this.clean(changes);
+    await this.store.update((data) => this.mutate(data, changes));
+  }
+
+  clean(changes) {
     const keys = this.fieldKeys();
-    const clean = (obj) => {
+    const values = (obj) => {
       const out = {};
-      for (const [key, values] of Object.entries(obj || {})) {
+      for (const [key, list] of Object.entries(obj || {})) {
         if (!keys.has(key)) throw new RangeError(`Unknown field: ${key}`);
-        if (!Array.isArray(values)) throw new RangeError(`Values for ${key} must be a list`);
-        out[key] = values.map((v) => String(v).trim().slice(0, MAX_VALUE)).filter(Boolean);
+        if (!Array.isArray(list)) throw new RangeError(`Values for ${key} must be a list`);
+        out[key] = list.map((v) => String(v).trim().slice(0, MAX_VALUE)).filter(Boolean);
       }
       return out;
     };
-    changes = changes.map(({ id, add, remove }) => ({ id, add: clean(add), remove: clean(remove) }));
+    return changes.map(({ id, add, remove }) => ({ id, add: values(add), remove: values(remove) }));
+  }
 
-    await this.store.update((data) => {
-      // Reuse the existing spelling of a value ("duffel" -> "Duffel") so filters stay tidy.
-      const canonical = new Map();
-      for (const f of this.fields()) {
-        for (const v of f.values) canonical.set(`${f.key}\0${v.toLowerCase()}`, v);
-      }
-      for (const { id, add, remove } of changes) {
-        const tags = data.tags[id] || {};
-        for (const [key, values] of Object.entries(add)) {
-          const current = tags[key] || [];
-          for (const raw of values) {
-            const v = canonical.get(`${key}\0${raw.toLowerCase()}`) || raw;
-            canonical.set(`${key}\0${v.toLowerCase()}`, v);
-            if (!current.some((c) => c.toLowerCase() === v.toLowerCase()) && current.length < MAX_VALUES) {
-              current.push(v);
-            }
+  mutate(data, changes) {
+    // Reuse the existing spelling of a value ("duffel" -> "Duffel") so filters stay tidy.
+    const canonical = new Map();
+    for (const f of this.fields()) {
+      for (const v of f.values) canonical.set(`${f.key}\0${v.toLowerCase()}`, v);
+    }
+    for (const { id, add, remove } of changes) {
+      const tags = data.tags[id] || {};
+      for (const [key, values] of Object.entries(add)) {
+        const current = tags[key] || [];
+        for (const raw of values) {
+          const v = canonical.get(`${key}\0${raw.toLowerCase()}`) || raw;
+          canonical.set(`${key}\0${v.toLowerCase()}`, v);
+          if (!current.some((c) => c.toLowerCase() === v.toLowerCase()) && current.length < MAX_VALUES) {
+            current.push(v);
           }
-          tags[key] = current;
         }
-        for (const [key, values] of Object.entries(remove)) {
-          const drop = new Set(values.map((v) => v.toLowerCase()));
-          tags[key] = (tags[key] || []).filter((v) => !drop.has(v.toLowerCase()));
-        }
-        for (const key of Object.keys(tags)) if (!tags[key].length) delete tags[key];
-        if (Object.keys(tags).length) data.tags[id] = tags;
-        else delete data.tags[id];
+        tags[key] = current;
       }
+      for (const [key, values] of Object.entries(remove)) {
+        const drop = new Set(values.map((v) => v.toLowerCase()));
+        tags[key] = (tags[key] || []).filter((v) => !drop.has(v.toLowerCase()));
+      }
+      for (const key of Object.keys(tags)) if (!tags[key].length) delete tags[key];
+      if (Object.keys(tags).length) data.tags[id] = tags;
+      else delete data.tags[id];
+    }
+  }
+
+  label(id) {
+    return this.data.labels?.[id] || null;
+  }
+
+  // Sets a file's or folder's label from its parts ({ product, concept, format,
+  // aspect, creator, date, version }). The parts are also added as tags,
+  // replacing the ones a previous label added.
+  async setLabel(id, parts = {}) {
+    const { name, errors } = naming.compose(parts);
+    if (!name) throw new RangeError(Object.values(errors)[0]);
+    const clean = {
+      ...Object.fromEntries(LABEL_FIELDS.map((k) => [k, String(parts[k]).trim().slice(0, MAX_VALUE)])),
+      aspect: naming.aspectToken(parts.aspect),
+      date: parts.date,
+      version: Number(parts.version),
+    };
+    const updatedAt = new Date().toISOString();
+    await this.store.update((data) => {
+      data.labels ||= {};
+      const old = data.labels[id]?.parts || {};
+      const add = {};
+      const remove = {};
+      for (const k of LABEL_FIELDS) {
+        add[k] = [clean[k]];
+        if (old[k] && old[k].toLowerCase() !== clean[k].toLowerCase()) remove[k] = [old[k]];
+      }
+      this.mutate(data, this.clean([{ id, add, remove }]));
+      data.labels[id] = { name, parts: clean, updatedAt };
     });
+    return this.label(id);
+  }
+
+  // Removes the label; its tags stay.
+  async removeLabel(id) {
+    await this.store.update((data) => { if (data.labels) delete data.labels[id]; });
   }
 
   // Effective metadata for an asset: values from every enclosing folder plus
@@ -169,4 +227,4 @@ class TagStore {
   }
 }
 
-module.exports = { TagStore, DEFAULT_FIELDS };
+module.exports = { TagStore, DEFAULT_FIELDS, LABEL_FIELDS };

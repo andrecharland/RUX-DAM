@@ -188,6 +188,32 @@ this asset** (in the viewer) copy it, e.g.
 `…/?tag=product:Duffel&tag=season:Winter&rights=cleared` opens straight to cleared Duffel
 photos tagged Winter. People opening the link need the app's password, if one is set.
 
+## Labels (RUX naming convention)
+
+Any folder or file can get a label in the naming convention from the RUX Paid Social Creative
+Playbook:
+
+`RUX_[Product]_[ConceptFamily]_[Format]_[Aspect]_[Creator]_[YYYY-MM-DD]_v01`
+e.g. `RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v01`
+
+Click **Add label** in a folder's panel or under a file's name in the viewer. Each part has
+suggestions (Concept family: Product-in-Context, System/Stack, Proof, Lifestyle/Emotional, Social
+Proof; Format: Carousel, Feed Video, Reels, Static; Aspect: 9x16, 4x5, 1x1, 1.91x1, 16x9, 4x1;
+change them under **Edit field values**), and the name is built as you type: spaces and punctuation
+are removed and words capitalized ("Gear Box 70L" becomes `GearBox70L`, a leading "RUX" is dropped
+from products, "9:16" becomes `9x16`).
+
+- The label is shown in place of the Drive name (folder tree, breadcrumbs, cards, viewer) with the
+  Drive name underneath; nothing in Drive is renamed. Search matches labels.
+- The parts are also added as tags (Product, Concept family, Format, Aspect, Creator), so they can be
+  filtered, and a folder's label parts apply to everything inside it. Editing a label replaces the
+  tags its previous version added; removing a label keeps its tags.
+- Downloads of a labelled file use the label as the file name, with the original extension.
+- The editor pre-fills from the Drive name when it already follows the convention, otherwise from
+  the item's tags, the aspect of its pixel size and its date.
+
+Labels are stored in `tags.json`.
+
 ## Finding files by date, format and size
 
 The **File details** filters in the sidebar come from Google Drive's file information:
@@ -195,7 +221,7 @@ The **File details** filters in the sidebar come from Google Drive's file inform
 - **Date taken**: Last 7 days, Last 30 days, Last 12 months, This year, or a custom range. It uses
   the capture date the camera wrote into the photo when there is one, otherwise the date the
   file was added to Drive (videos always use the date added). **Year taken** lists years with counts.
-- **Format** (RAW covers CR2/CR3, NEF, ARW, DNG, RAF and other camera raw files), **Orientation**
+- **File type** (RAW covers CR2/CR3, NEF, ARW, DNG, RAF and other camera raw files), **Orientation**
   (landscape, portrait, square, panorama), **Resolution** (under 2 MP for web up to 24 MP+ for print),
   **File size**, **Video length** and **Camera**.
 
