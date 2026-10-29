@@ -214,6 +214,23 @@ from products, "9:16" becomes `9x16`).
 
 Labels are stored in `tags.json`.
 
+## Platform readiness
+
+Every photo and video is checked against the platform specs in the RUX Paid Social Creative
+Playbook: Reels and Stories (9:16, 1080×1920), Feed 4:5 (1080×1350), Feed 1:1 and Carousel
+(1080×1080), and Google landscape (1.91:1, 1200×628), square (1200×1200) and portrait (4:5,
+960×1200). For each placement an asset is:
+
+- **Ready**: the right shape and at least the minimum size;
+- **Crop needed**: a centered crop to that shape would still meet the minimum (the playbook asks for
+  deliberate crops rather than relying on auto-cropping), with the crop size;
+- **Too small**: not enough pixels either way.
+
+The viewer's **Platforms** table shows this per placement. For 9:16 assets, **Show 9:16 safe zones**
+overlays the playbook's guides on the image: top and bottom 14% covered by app UI, text inside the
+center 80%, hero product inside the center 60%. The **Ready for** filter (under File details) lists
+assets usable for a placement, as they are or with a deliberate crop.
+
 ## Finding files by date, format and size
 
 The **File details** filters in the sidebar come from Google Drive's file information:

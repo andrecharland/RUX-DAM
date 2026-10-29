@@ -3,6 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { fileFacets, parseTakenTime, formatOf } = require('../src/fileinfo');
+const { PLACEMENTS } = require('../public/specs');
+
+const ALL = PLACEMENTS.map((p) => p.name);
 const { toAsset } = require('../src/drive');
 const { Library } = require('../src/library');
 const { TagStore } = require('../src/tags');
@@ -25,14 +28,18 @@ const assets = [
 test('derives format, date, size, shape, resolution, length and camera', () => {
   assert.deepStrictEqual(fileFacets(assets[0]), {
     format: 'RAW', year: '2025', size: '20–100 MB', orientation: 'Landscape', resolution: '24 MP+ (print)', camera: 'Canon EOS R5',
+    ready: ALL,
   });
   assert.deepStrictEqual(fileFacets(assets[1]), {
     format: 'JPG', year: '2026', size: 'Under 1 MB', orientation: 'Portrait', resolution: '2–12 MP', camera: 'Apple iPhone 16 Pro',
+    // 1080×1920: too narrow for Google landscape and square minimums.
+    ready: ['Reels', 'Stories', 'Feed 4:5', 'Feed 1:1', 'Carousel', 'Google portrait'],
   });
   assert.strictEqual(fileFacets(assets[2]).orientation, 'Panorama');
   assert.strictEqual(fileFacets(assets[3]).orientation, 'Portrait', 'EXIF rotation swaps width and height');
   assert.deepStrictEqual(fileFacets(assets[4]), {
     format: 'MOV', year: '2024', size: '100 MB – 1 GB', orientation: 'Landscape', duration: '15–60 s',
+    ready: ALL,
   });
   assert.strictEqual(parseTakenTime('0000:00:00 00:00:00'), null);
   assert.strictEqual(formatOf({ name: 'x.jpeg', mimeType: 'application/octet-stream' }), 'JPG');
@@ -72,4 +79,30 @@ test('filters by file properties and date range, sorts, and counts file facets',
   assert.deepStrictEqual(counts.format, { RAW: 1, JPG: 3, MOV: 1 });
   assert.deepStrictEqual(counts.year, { 2025: 1, 2026: 3, 2024: 1 });
   assert.strictEqual(counts.duration['15–60 s'], 1);
+});
+
+test('platform readiness: ready, crop or too small for each placement', () => {
+  const { check, PLACEMENTS: P, isVertical } = require('../public/specs');
+  const by = (id) => P.find((p) => p.id === id);
+  assert.deepStrictEqual(check(1080, 1920, by('reels')), { status: 'ready', detail: '1080×1920' });
+  assert.deepStrictEqual(check(720, 1280, by('reels')), { status: 'small', detail: 'Needs 1080×1920, has 720×1280' });
+  assert.deepStrictEqual(check(1080, 1920, by('feed45')), { status: 'crop', detail: 'Crop to 1080×1350' });
+  assert.strictEqual(check(1080, 1920, by('google-landscape')).status, 'small');
+  assert.deepStrictEqual(check(1200, 628, by('google-landscape')), { status: 'ready', detail: '1200×628' });
+  assert.deepStrictEqual(check(8192, 5464, by('reels')), { status: 'crop', detail: 'Crop to 3074×5464' });
+  assert.strictEqual(check(0, 0, by('reels')), null);
+  assert.ok(isVertical(1080, 1920));
+  assert.ok(!isVertical(1080, 1350));
+});
+
+test('Ready for filter', async () => {
+  const library = new Library({ crawl: async () => ({ assets: assets.map((a) => ({ ...a })), folders: [] }) }, ['root'],
+    { tags: new TagStore({ log: quiet }), log: quiet });
+  await library.sync();
+  const ids = (r) => r.items.map((a) => a.id).sort();
+  // Everything big enough for a 1.91:1 crop; the 1080-wide story is not.
+  assert.deepStrictEqual(ids(library.search({ file: ['ready:Google landscape'] })), ['clip', 'pano', 'raw', 'turned']);
+  const counts = library.search({}).fileFacets.ready;
+  assert.strictEqual(counts.Reels, 5);
+  assert.strictEqual(counts['Google landscape'], 4);
 });

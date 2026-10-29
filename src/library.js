@@ -244,7 +244,8 @@ class Library {
         if (!(view.tags[key] || []).some((t) => wanted.has(t.value.toLowerCase()))) failed.push(`tag:${key}`);
       }
       for (const [key, wanted] of fileFilters) {
-        if (!wanted.has(String(props[key] || '').toLowerCase())) failed.push(`file:${key}`);
+        const values = [].concat(props[key] ?? []);
+        if (!values.some((v) => wanted.has(String(v).toLowerCase()))) failed.push(`file:${key}`);
       }
       if (failed.length > 1) continue;
       const counts = (group) => !failed.length || failed[0] === group;
@@ -256,7 +257,7 @@ class Library {
       for (const [key, value] of Object.entries(props)) {
         if (!counts(`file:${key}`)) continue;
         const c = (fileCounts[key] ||= {});
-        c[value] = (c[value] || 0) + 1;
+        for (const v of [].concat(value)) c[v] = (c[v] || 0) + 1;
       }
       if (!failed.length) matches.push(view);
     }

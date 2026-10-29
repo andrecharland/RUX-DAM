@@ -185,7 +185,7 @@ dialog {
 }
 dialog::backdrop { background: rgba(0,0,0,.7); }
 .viewer { display: flex; height: 100%; }
-.stage { flex: 1; min-width: 0; background: #000; display: grid; place-items: center; }
+.stage { flex: 1; min-width: 0; background: #000; display: grid; place-items: center; position: relative; }
 .stage img, .stage video { max-width: 100%; max-height: 100%; object-fit: contain; }
 .details { width: 340px; padding: 20px; border-left: 1px solid var(--line); overflow: auto; position: relative; }
 .details h2 { font-size: 16px; margin: 0 24px 16px 0; word-break: break-word; }
@@ -287,3 +287,21 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .lb-preview { display: block; padding: 10px; min-height: 1.4em; }
 .lb-msg { min-height: 1.3em; margin: 0; color: var(--danger); font-size: 13px; }
 @media (max-width: 520px) { .lb-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Platform readiness */
+.specs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.specs td { padding: 5px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.specs td:last-child { color: var(--muted); }
+.spec { display: inline-block; white-space: nowrap; font-weight: 600; font-size: 12px; padding: 1px 8px; border-radius: 999px; }
+.spec.ready { background: #e6f4ea; color: #1f6f3f; }
+.spec.crop { background: #fff1d6; color: #7a4800; }
+.spec.small { background: #fde8e6; color: #b42318; }
+.zones-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-bottom: 8px; }
+.zones { position: absolute; pointer-events: none; }
+.zones .band { position: absolute; left: 0; right: 0; height: 14%; background: rgba(180, 35, 24, .45); color: #fff;
+  font-size: 11px; display: grid; place-items: center; }
+.zones .band.top { top: 0; }
+.zones .band.bottom { bottom: 0; }
+.zones .text-area { position: absolute; left: 10%; right: 10%; top: 14%; bottom: 14%; border: 1.5px dashed #fff; }
+.zones .hero-area { position: absolute; left: 20%; right: 20%; top: 20%; bottom: 20%; border: 1.5px dotted #ffd28a;
+  color: #ffd28a; font-size: 11px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; }

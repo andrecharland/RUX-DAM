@@ -1,5 +1,7 @@
 'use strict';
 
+const { usableFor, PLACEMENTS } = require('../public/specs');
+
 // File-property facets (date, format, size, shape, length, camera) derived
 // from Drive metadata, and the sort orders for search results.
 
@@ -58,7 +60,8 @@ function orientationOf(asset) {
   return 'Square';
 }
 
-// Facet values for one asset: { key: label }; missing info is left out.
+// Facet values for one asset: { key: label }, or a list of labels for `ready`
+// (every placement it can be used for); missing info is left out.
 function fileFacets(asset) {
   const out = { format: formatOf(asset) };
   const date = assetDate(asset);
@@ -71,6 +74,8 @@ function fileFacets(asset) {
   }
   if (asset.kind === 'video' && asset.durationMs) out.duration = bucket(asset.durationMs, DURATION_BUCKETS);
   if (asset.camera) out.camera = asset.camera;
+  const ready = usableFor(asset.width, asset.height);
+  if (ready.length) out.ready = ready;
   return out;
 }
 
@@ -92,5 +97,6 @@ module.exports = {
     resolution: RESOLUTION_BUCKETS.map(([label]) => label),
     duration: DURATION_BUCKETS.map(([label]) => label),
     orientation: ORIENTATIONS,
+    ready: PLACEMENTS.map((p) => p.name),
   },
 };
