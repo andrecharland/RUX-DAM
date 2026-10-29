@@ -27,7 +27,9 @@ async function authedFetch(auth, url, init = {}, { retries = 4 } = {}) {
   const authHeaders = Object.fromEntries(new Headers(await client.getRequestHeaders()));
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url, { ...init, headers: { ...authHeaders, ...init.headers } });
-    if (!RETRYABLE.has(res.status) || attempt >= retries) return res;
+    // Drive reports rate limits as 403 with a rateLimitExceeded reason.
+    const limited = res.status === 403 && /rateLimitExceeded/i.test(await res.clone().text().catch(() => ''));
+    if ((!RETRYABLE.has(res.status) && !limited) || attempt >= retries) return res;
     await res.body?.cancel();
     await new Promise((r) => setTimeout(r, 2 ** attempt * 500 + Math.random() * 250));
   }

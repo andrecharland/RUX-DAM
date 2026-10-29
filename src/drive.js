@@ -5,6 +5,9 @@ const { parseTakenTime } = require('./fileinfo');
 
 const API = 'https://www.googleapis.com/drive/v3';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
+// Drive's thumbnail links last a few hours; reuse them for up to an hour.
+const LINK_TTL = 60 * 60 * 1000;
+
 const FIELDS = 'nextPageToken,files(id,name,mimeType,fileExtension,size,createdTime,modifiedTime,' +
   'thumbnailLink,imageMediaMetadata(width,height,rotation,time,cameraMake,cameraModel),' +
   'videoMediaMetadata(width,height,durationMillis),webViewLink,parents)';
@@ -53,9 +56,15 @@ function toAsset(file, folderPath, rootName, ancestors = []) {
 }
 
 class DriveClient {
-  constructor(auth, { concurrency = 8 } = {}) {
+  constructor(auth, { concurrency = 8, thumbnailConcurrency = 12 } = {}) {
     this.auth = auth;
     this.concurrency = concurrency;
+    // Thumbnail links from the last crawl (or a lookup): id -> { url, at }.
+    // They are signed URLs that expire after a while, so they're refreshed by
+    // every sync and fetched again when one stops working.
+    this.links = new Map();
+    this.thumbnailSlots = thumbnailConcurrency;
+    this.waiting = [];
   }
 
   async request(path, { params = {}, headers = {}, raw = false } = {}) {
@@ -117,6 +126,7 @@ class DriveClient {
           });
         } else if (isMedia(file.mimeType) && !isJunk(file.name)) {
           assets.push(toAsset(file, path, root.name, ancestors));
+          if (file.thumbnailLink) this.links.set(file.id, { url: file.thumbnailLink, at: Date.now() });
         }
       }
     };
@@ -139,11 +149,39 @@ class DriveClient {
   }
 
   // Drive thumbnail links need auth, so the server proxies them.
+  // A preview image at `size` px. Uses the cached link when it's recent, and
+  // looks the link up again once if Drive rejects it (expired).
   async thumbnail(id, size = 400) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const link = await this.thumbnailLink(id, attempt > 0);
+      if (!link) return null;
+      const res = await this.throttle(() => this.request(link.replace(/=s\d+$/, `=s${size}`), { raw: true }));
+      if (res.ok || attempt) return res;
+      await res.body?.cancel();
+    }
+    return null;
+  }
+
+  async thumbnailLink(id, fresh = false) {
+    const hit = this.links.get(id);
+    if (!fresh && hit && Date.now() - hit.at < LINK_TTL) return hit.url;
     const file = await this.getFile(id);
-    if (!file.thumbnailLink) return null;
-    const link = file.thumbnailLink.replace(/=s\d+$/, `=s${size}`);
-    return this.request(link, { raw: true });
+    if (file.thumbnailLink) this.links.set(id, { url: file.thumbnailLink, at: Date.now() });
+    return file.thumbnailLink || null;
+  }
+
+  // Runs at most `thumbnailConcurrency` preview fetches at once, so a page of
+  // 120 tiles doesn't hit Drive's rate limits all at the same moment.
+  async throttle(fn) {
+    if (this.thumbnailSlots > 0) this.thumbnailSlots--;
+    else await new Promise((resolve) => this.waiting.push(resolve));
+    try {
+      return await fn();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.thumbnailSlots++;
+    }
   }
 
   media(id, range) {

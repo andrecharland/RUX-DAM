@@ -1785,3 +1785,18 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') $('folder-suggest-menu').open = false;
 });
+
+// A thumbnail that fails (Drive busy or a link expiring) is retried once after a
+// moment; if it fails again the tile shows a plain placeholder, not a broken image.
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  // The viewer's large image has its own fallback (the original file).
+  if (!(img instanceof HTMLImageElement) || !img.src.includes('/thumbnail') || img.closest('#stage')) return;
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    setTimeout(() => { img.src = `${img.src}${img.src.includes('?') ? '&' : '?'}retry=1`; }, 1500 + Math.random() * 1500);
+  } else {
+    img.classList.add('failed');
+    img.alt = 'Preview unavailable';
+  }
+}, true);
