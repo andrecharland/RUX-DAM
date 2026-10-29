@@ -88,6 +88,8 @@ const SORTS = {
   name: (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
   size: (a, b) => (b.size || 0) - (a.size || 0),
   duration: (a, b) => (b.durationMs || 0) - (a.durationMs || 0),
+  // Highest rated first; unrated keep their stored (newest modified) order.
+  rating: (a, b) => (b.rating || 0) - (a.rating || 0),
 };
 
 module.exports = {

@@ -3,6 +3,7 @@
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
 const { SuggestionStore } = require('./suggest');
+const { CurationStore } = require('./curation');
 const { fileFacets, assetDate, formatOf, SORTS } = require('./fileinfo');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
@@ -37,6 +38,7 @@ class Library extends EventEmitter {
     rights = new RightsStore(),
     tags = new TagStore(),
     suggestions = new SuggestionStore(),
+    curation = new CurationStore(),
     index = null,
     log = console,
   } = {}) {
@@ -47,6 +49,7 @@ class Library extends EventEmitter {
     this.rights = rights;
     this.tags = tags;
     this.suggestions = suggestions;
+    this.curation = curation;
     this.index = index;
     this.log = log;
     this.assets = [];
@@ -71,7 +74,7 @@ class Library extends EventEmitter {
   }
 
   async loadStores(errors) {
-    for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions]]) {
+    for (const [name, store] of [['rights', this.rights], ['tags', this.tags], ['suggestions', this.suggestions], ['curation', this.curation]]) {
       try {
         await store.load();
       } catch (err) {
@@ -178,6 +181,7 @@ class Library extends EventEmitter {
       tags,
       ownTags: this.tags.own(asset.id),
       suggestions: this.suggestions.resolve(asset.id, tags),
+      rating: this.curation.rating(asset.id),
     };
   }
 
@@ -243,10 +247,17 @@ class Library extends EventEmitter {
   // ("looks like this"); with 'append', assets the search text doesn't match
   // but that rank highly are added after the text matches, marked
   // `match: 'visual'` (search by description).
+  //
+  // Curation: `rating` keeps assets with at least that many stars, `collection`
+  // those in a collection (in the collection's order unless another sort is
+  // chosen), and `favorites` (a Set of ids, the person's favorites) marks items
+  // `favorite: true`, or with `favoritesOnly` keeps only those.
   search({
     q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', file = [],
     from = '', to = '', sort = 'modified', offset = 0, limit = 100, rank = null, rankMode = '',
+    rating = 0, collection = '', favorites = null, favoritesOnly = false,
   } = {}) {
+    const picked = collection ? new Map((this.curation.collection(collection)?.items || []).map((id, i) => [id, i])) : null;
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const tagFilters = parseTagFilters(tags);
     const fileFilters = parseTagFilters(file);
@@ -255,6 +266,9 @@ class Library extends EventEmitter {
     const fileCounts = {};
     for (const a of this.assets) {
       if (rankMode === 'only' && !rank?.has(a.id)) continue;
+      if (picked && !picked.has(a.id)) continue;
+      if (favoritesOnly && !favorites?.has(a.id)) continue;
+      if (rating && this.curation.rating(a.id) < rating) continue;
       if (kind && a.kind !== kind) continue;
       if (folder && !a.ancestors.some((f) => f.id === folder)) continue;
       const day = assetDate(a).slice(0, 10);
@@ -302,10 +316,14 @@ class Library extends EventEmitter {
         const c = (fileCounts[key] ||= {});
         for (const v of [].concat(value)) c[v] = (c[v] || 0) + 1;
       }
+      if (favorites?.has(a.id)) view.favorite = true;
       if (!failed.length) matches.push(view);
     }
     const score = (v) => rank?.get(v.id) ?? 0;
-    if (rankMode === 'only' && (!sort || sort === 'modified')) {
+    const inOrder = picked && (!sort || sort === 'modified');
+    if (inOrder) {
+      matches.sort((x, y) => picked.get(x.id) - picked.get(y.id));
+    } else if (rankMode === 'only' && (!sort || sort === 'modified')) {
       matches.sort((x, y) => score(y) - score(x));
     } else {
       if (SORTS[sort]) matches.sort(SORTS[sort]);
@@ -319,7 +337,7 @@ class Library extends EventEmitter {
     // Per-month counts for date headings and jump-to-date, by the sort's date.
     const dateOf = { modified: (v) => v.modifiedTime, added: (v) => v.createdTime, taken: assetDate, 'taken-asc': assetDate }[sort || 'modified'];
     let months = null;
-    if (dateOf && rankMode !== 'only') {
+    if (dateOf && rankMode !== 'only' && !inOrder) {
       months = {};
       for (const v of matches) {
         if (v.match) continue;

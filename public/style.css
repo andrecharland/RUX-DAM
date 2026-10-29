@@ -104,6 +104,7 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 .crumbs button { all: unset; cursor: pointer; color: var(--text); }
 .crumbs button:hover { text-decoration: underline; }
 .crumbs .sep { color: var(--muted); }
+.crumbs .here { color: var(--text); }
 .folder-tags { margin: 12px 16px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .ft-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .ft-toggle { all: unset; cursor: pointer; flex: 1 1 260px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 0; }
@@ -233,6 +234,18 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 .info .sub { color: #d4d4d8; font-size: 11px; }
 .info .ai { color: #d8c4ff; font-size: 11px; }
 .card:hover .badge, .card:hover .ai-dot { opacity: 0; }
+/* Favorite (top right, beside the select box) and team rating (bottom left). */
+.heart {
+  all: unset; position: absolute; top: 5px; right: 34px; z-index: 1; cursor: pointer;
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0,0,0,.55); color: #fff; font-size: 14px; opacity: 0; transition: opacity .1s;
+}
+.heart.on { color: #ff5a7a; opacity: 1; }
+.card:hover .heart, .heart:focus-visible { opacity: 1; }
+@media (hover: none) { .heart { opacity: 1; } }
+.stars-badge { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.65); color: #ffcc4d; font-size: 11px; letter-spacing: 1px; padding: 2px 6px; border-radius: 4px; }
+.ai-dot ~ .stars-badge { bottom: 30px; }
+.card:hover .stars-badge { opacity: 0; }
 
 /* Jump to date */
 .scrubber {
@@ -419,3 +432,35 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .label-row .drive-name { color: var(--muted); font-size: 12px; width: 100%; word-break: break-word; }
 
 .group { scroll-margin-top: 63px; }
+
+/* Curation: stars, favorites, collections */
+.curate { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.stars { display: inline-flex; }
+.stars button { all: unset; cursor: pointer; font-size: 20px; line-height: 1; padding: 0 2px; color: var(--line); }
+.stars button.on { color: #f5b400; }
+.stars:hover button { color: #f5b400; }
+.stars button:hover ~ button { color: var(--line); }
+.stars button:focus-visible, .fav-btn:focus-visible { outline: 2px solid var(--select); border-radius: 4px; }
+.fav-btn { all: unset; cursor: pointer; font-size: 20px; line-height: 1; color: var(--line); }
+.fav-btn.on { color: #ff5a7a; }
+.curate .btn.small { margin-left: auto; }
+.in-collections { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
+.in-collections:empty { display: none; }
+.in-collections .hint { margin: 0; font-size: 12px; }
+.in-collections .chip { cursor: pointer; border: none; font: inherit; font-size: 12px; }
+.collection-panel .col-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.collection-panel .col-title strong { font-size: 16px; }
+.collection-panel .hint { margin: 2px 0 0; }
+.col-desc { margin: 8px 0 0; color: var(--muted); }
+.btn.danger { color: var(--danger); }
+.collect-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }
+.collect-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; }
+.collect-item:hover { background: var(--chip); }
+.collect-item input { width: 18px; height: 18px; accent-color: var(--select); }
+.collect-item span:nth-child(2) { flex: 1; }
+.collect-item .count { color: var(--muted); font-size: 12px; }
+.collect-new { display: flex; gap: 8px; }
+.collect-new input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.collect-msg { min-height: 1.3em; margin: 0; color: var(--muted); font-size: 13px; }
+.bulk-curate { display: flex; flex-wrap: wrap; gap: 8px; }
+.bulk-curate select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }

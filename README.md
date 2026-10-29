@@ -20,6 +20,7 @@ assets, do it in Drive and the DAM picks it up on the next sync.
   MP4, MOV…), orientation, resolution, file size, video length and camera; sort by date taken,
   date added, name, file size or video length
 - Tag suggestions from Claude (product, activity, color, vehicle, season, keywords) that you accept or dismiss
+- Star ratings (one per photo for the team), personal favorites, and team collections
 - Shareable links: the URL always reflects the current folder, filters, search and open asset
 - Preview images and stream videos (with seeking) in the browser
 - Download originals, open in Drive, copy a direct link
@@ -196,6 +197,22 @@ filters and the open asset. **Copy link to this view** (above the grid) and **Co
 this asset** (in the viewer) copy it, e.g.
 `…/?tag=product:Duffel&tag=season:Winter&rights=cleared` opens straight to cleared Duffel
 photos tagged Winter. People opening the link need the app's password, if one is set.
+
+## Ratings, favorites and collections
+
+- **Ratings**: 1 to 5 stars per photo or video, one rating shared by the whole team. In the viewer
+  press 1–5 (0 clears) or click the stars; for a selection use **★ Rate…** in the selection bar.
+  Filter with **Rating** in the sidebar ("★★★★ and up") and sort by **Highest rated**.
+- **Favorites**: ♥ on a tile, the ♥ in the viewer, or F. Favorites are personal (by Google
+  account; shared by everyone when sign-in is off) and listed under **My favorites**.
+- **Collections**: hand-picked sets anyone on the team can make and edit, independent of the Drive
+  folders (an asset can be in several). Use **+ Collection** in the viewer or **Add to collection…**
+  for a selection; tick or untick collections, or name a new one. Collections are listed in the
+  sidebar, keep the order items were added (other sorts still work), and can be renamed, described,
+  linked to (**Copy link**) or deleted; **Remove from this collection** works on a selection.
+  Links work for anyone who can sign in to the DAM.
+
+All three are stored as `curation.json` in the data bucket.
 
 ## Titles and RUX file names
 

@@ -33,6 +33,7 @@
       <option value="name">Name A–Z</option>
       <option value="size">Largest file</option>
       <option value="duration">Longest video</option>
+      <option value="rating">Highest rated</option>
     </select>
     <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
     <span id="user" class="user" hidden></span>
@@ -41,6 +42,13 @@
   <div class="layout">
     <aside id="side" class="side">
       <section>
+        <div class="side-head">
+          <h2>Collections</h2>
+          <button id="new-collection" class="link" type="button">+ New</button>
+        </div>
+        <ul id="collections" class="tree"></ul>
+      </section>
+      <section>
         <h2>Folders</h2>
         <ul id="tree" class="tree"></ul>
       </section>
@@ -48,6 +56,17 @@
         <div class="side-head">
           <h2>Filters</h2>
           <button id="clear-filters" class="link" type="button" hidden>Clear</button>
+        </div>
+        <div class="facet">
+          <h3>Rating</h3>
+          <select id="rating" class="date-range" aria-label="Rating">
+            <option value="">Any rating</option>
+            <option value="1">★ and up</option>
+            <option value="2">★★ and up</option>
+            <option value="3">★★★ and up</option>
+            <option value="4">★★★★ and up</option>
+            <option value="5">★★★★★</option>
+          </select>
         </div>
         <div id="facets"></div>
         <div class="side-links">
@@ -108,6 +127,7 @@
           <div id="folder-ai" class="folder-ai"></div>
         </div>
       </section>
+      <section id="collection-panel" class="folder-tags collection-panel" hidden></section>
       <section id="folder-cards" class="folder-cards" aria-label="Folders" hidden></section>
       <div class="toolbar">
         <p id="meta" class="meta"></p>
@@ -137,6 +157,20 @@
       <button id="bulk-suggest" class="btn ghost" type="button">✨ Suggest tags</button>
       <button id="bulk-accept" class="btn ghost" type="button">Accept suggestions</button>
     </div>
+    <div class="bulk-curate">
+      <select id="bulk-rate" aria-label="Rate the selected assets">
+        <option value="">★ Rate…</option>
+        <option value="1">★</option>
+        <option value="2">★★</option>
+        <option value="3">★★★</option>
+        <option value="4">★★★★</option>
+        <option value="5">★★★★★</option>
+        <option value="0">Clear rating</option>
+      </select>
+      <button id="bulk-fav" class="btn ghost" type="button">♥ Favorite</button>
+      <button id="bulk-collect" class="btn ghost" type="button">Add to collection…</button>
+      <button id="bulk-uncollect" class="btn ghost" type="button" hidden>Remove from this collection</button>
+    </div>
     <button id="bulk-clear" class="btn ghost" type="button">Clear selection</button>
   </div>
 
@@ -158,13 +192,19 @@
             <button id="z-100" type="button">100%</button>
             <button id="z-200" type="button">200%</button>
           </div>
-          <span class="keys">← → browse · Z zoom · Esc close</span>
+          <span class="keys">← → browse · 1–5 rate · F favorite · Z zoom · Esc close</span>
         </div>
         <div id="filmstrip" class="filmstrip" aria-label="Nearby assets"></div>
       </div>
       <aside class="details">
         <h2 id="d-name"></h2>
         <div id="d-label" class="label-row"></div>
+        <div class="curate">
+          <div id="d-stars" class="stars" role="group" aria-label="Rating (keys 1–5, 0 clears)"></div>
+          <button id="d-fav" class="fav-btn" type="button" aria-pressed="false" title="Favorite (F)">♥</button>
+          <button id="d-collect" class="btn ghost small" type="button">+ Collection</button>
+        </div>
+        <div id="d-in" class="in-collections"></div>
         <dl id="d-meta"></dl>
         <div class="actions">
           <a id="d-download" class="btn">Download</a>
@@ -215,6 +255,19 @@
         </section>
       </aside>
     </div>
+  </dialog>
+
+  <dialog id="collect-dialog" class="vocab">
+    <form id="collect-form" class="vocab-body" method="dialog">
+      <button id="collect-close" class="close" type="button" aria-label="Close">×</button>
+      <h2 id="collect-title">Add to collection</h2>
+      <div id="collect-list" class="collect-list"></div>
+      <div class="collect-new">
+        <input id="collect-name" type="text" maxlength="80" placeholder="New collection name" aria-label="New collection name" autocomplete="off">
+        <button id="collect-create" class="btn" type="submit">Create</button>
+      </div>
+      <p id="collect-msg" class="collect-msg" role="status"></p>
+    </form>
   </dialog>
 
   <dialog id="vocab" class="vocab">

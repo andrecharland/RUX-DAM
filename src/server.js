@@ -9,6 +9,7 @@ const { DriveClient } = require('./drive');
 const { Library } = require('./library');
 const { RightsStore } = require('./rights');
 const { TagStore } = require('./tags');
+const { CurationStore } = require('./curation');
 const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 const { JsonStore } = require('./store');
 const { ORDER: FILE_FACET_ORDER } = require('./fileinfo');
@@ -59,6 +60,8 @@ async function pipeDrive(driveRes, res, passHeaders) {
 function createApp({ library, drive, password, suggester, signIn, similarity }) {
   const app = express();
   app.disable('x-powered-by');
+  // Whose favorites: the signed-in person, or everyone together without sign-in.
+  const who = (req) => req.user?.email || '';
 
   // Cloud Run terminates HTTPS in front of the app; trust its forwarded headers.
   app.set('trust proxy', true);
@@ -114,6 +117,10 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
       limit,
       rank,
       rankMode,
+      rating: Math.min(Math.max(Number(req.query.rating) || 0, 0), 5),
+      collection: String(req.query.collection || ''),
+      favorites: library.curation.favorites(who(req)),
+      favoritesOnly: req.query.fav === '1',
     }) });
   });
 
@@ -128,7 +135,85 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
   app.get('/api/assets/:id', (req, res) => {
     const asset = library.byId.get(req.params.id);
     if (!asset) return res.sendStatus(404);
-    res.json(library.view(asset));
+    res.json({
+      ...library.view(asset),
+      favorite: library.curation.favorites(who(req)).has(asset.id),
+      collections: library.curation.collectionsOf(asset.id),
+    });
+  });
+
+  // ---------- curation: ratings, favorites, collections ----------
+
+  // Asset ids from a request body, all known to the library (else a 400/404).
+  const assetIds = (req, res) => {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length || ids.length > 5000) {
+      res.status(400).json({ error: 'ids must be a non-empty list' });
+      return null;
+    }
+    if (ids.some((id) => !library.has(id))) {
+      res.sendStatus(404);
+      return null;
+    }
+    return ids.map(String);
+  };
+  const badRequest = (res, next) => (err) => (err instanceof RangeError ? res.status(400).json({ error: err.message }) : next(err));
+
+  // One team rating per asset: { ids, rating: 0-5 } (0 clears).
+  app.post('/api/rate', express.json({ limit: '1mb' }), async (req, res, next) => {
+    const ids = assetIds(req, res);
+    if (!ids) return;
+    await library.curation.rate(ids, req.body.rating).then(() => res.json({ updated: ids.length }), badRequest(res, next));
+  });
+
+  // The signed-in person's favorites: { ids, on: true | false }.
+  app.post('/api/favorite', express.json({ limit: '1mb' }), async (req, res, next) => {
+    const ids = assetIds(req, res);
+    if (!ids) return;
+    await library.curation.favorite(who(req), ids, req.body.on !== false).then(() => res.json({ updated: ids.length }), next);
+  });
+
+  const collectionSummary = (c) => {
+    const items = c.items.filter((id) => library.has(id));
+    return {
+      id: c.id, name: c.name, description: c.description, createdBy: c.createdBy, createdAt: c.createdAt, updatedAt: c.updatedAt,
+      count: items.length,
+      items,
+      covers: items.filter((id) => library.byId.get(id).hasThumbnail).slice(0, 3),
+    };
+  };
+
+  app.get('/api/collections', (req, res) => {
+    const favorites = [...library.curation.favorites(who(req))].filter((id) => library.has(id));
+    res.json({
+      favorites: { count: favorites.length },
+      collections: library.curation.collections().map(collectionSummary)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    });
+  });
+
+  // { name, description?, ids? }
+  app.post('/api/collections', express.json({ limit: '1mb' }), async (req, res, next) => {
+    const ids = (req.body?.ids || []).map(String).filter((id) => library.has(id));
+    await library.curation.createCollection({ ...req.body, ids }, who(req))
+      .then((c) => res.json(collectionSummary(c)), badRequest(res, next));
+  });
+
+  // { name?, description?, add?: [ids], remove?: [ids] } or { delete: true }
+  app.post('/api/collections/:id', express.json({ limit: '1mb' }), async (req, res, next) => {
+    const { id } = req.params;
+    if (!library.curation.collection(id)) return res.sendStatus(404);
+    try {
+      if (req.body?.delete) {
+        await library.curation.deleteCollection(id);
+        return res.json({ deleted: id });
+      }
+      const add = (req.body?.add || []).map(String).filter((x) => library.has(x));
+      const c = await library.curation.updateCollection(id, { ...req.body, add, remove: (req.body?.remove || []).map(String) });
+      res.json(collectionSummary(c));
+    } catch (err) {
+      badRequest(res, next)(err);
+    }
   });
 
   app.get('/api/folders', (req, res) => res.json(library.folderList()));
@@ -346,6 +431,7 @@ if (require.main === module) {
     rights: new RightsStore({ auth, bucket }),
     tags: new TagStore({ auth, bucket }),
     suggestions: new SuggestionStore({ auth, bucket }),
+    curation: new CurationStore({ auth, bucket }),
     // The last synced asset list, so restarts don't start from an empty grid.
     index: bucket ? new JsonStore({ auth, bucket, object: 'index.json', empty: () => ({ assets: [], folders: [] }) }) : null,
   });
