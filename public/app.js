@@ -1364,6 +1364,38 @@ async function saveRights(status) {
   $('r-msg').textContent = isFolder ? 'Saved for the whole folder.' : 'Saved.';
 }
 
+// Videos play from the file itself when the browser can decode it; otherwise
+// (H.265/HEVC, some MOVs: an error, or sound with no picture) they switch to
+// Google Drive's own player, which streams any format Drive has processed but
+// only for people who can open the file in Drive with their own account.
+function showVideo(asset, mode) {
+  for (const [id, m] of [['p-direct', 'direct'], ['p-drive', 'drive']]) $(id).setAttribute('aria-pressed', String(mode === m));
+  if (mode === 'drive') {
+    $('stage').replaceChildren(el('iframe', {
+      class: 'drive-player', src: `https://drive.google.com/file/d/${encodeURIComponent(asset.id)}/preview`,
+      allow: 'autoplay; fullscreen', allowfullscreen: true, title: `${displayName(asset)} in Google Drive's player`,
+    }));
+    $('v-note').textContent = 'Google Drive’s player. Shows “You need access” if your account can’t open this file in Drive.';
+    return;
+  }
+  const preview = asset.hasThumbnail ? viewerUrl(asset) : null;
+  const video = el('video', {
+    src: `/api/assets/${asset.id}/file`, controls: true, autoplay: true, playsinline: true, poster: preview, preload: 'metadata',
+  });
+  let switched = false;
+  const fallback = () => {
+    if (switched || state.current?.id !== asset.id) return;
+    switched = true;
+    showVideo(asset, 'drive');
+    $('v-note').textContent = 'This browser can’t play this video’s format, so it’s in Google Drive’s player ' +
+      '(needs access to the file in Drive).';
+  };
+  video.addEventListener('error', fallback);
+  video.addEventListener('loadedmetadata', () => { if (!video.videoWidth) fallback(); });
+  $('stage').replaceChildren(video);
+  $('v-note').textContent = '';
+}
+
 // Shows the grid's preview (already loaded) straight away, then the sharp one;
 // the original file if there's no preview or it fails.
 function photoElement(asset, preview, fileUrl) {
@@ -1390,10 +1422,10 @@ function open(asset) {
   // can't display (HEIC, RAW, TIFF, PSD) and loads faster than the original.
   // If there's no preview, fall back to the original file.
   const preview = asset.hasThumbnail ? viewerUrl(asset) : null;
-  const media = asset.kind === 'video'
-    ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview, preload: 'metadata' })
-    : photoElement(asset, preview, fileUrl);
-  $('stage').replaceChildren(media);
+  $('v-player').hidden = asset.kind !== 'video';
+  $('v-note').textContent = '';
+  if (asset.kind === 'video') showVideo(asset, 'direct');
+  else $('stage').replaceChildren(photoElement(asset, preview, fileUrl));
   prefetchNeighbors(asset);
   renderViewerLabel(asset);
   renderCurate(asset);
@@ -1833,6 +1865,8 @@ async function showUser() {
 })();
 
 $('ft-toggle').addEventListener('click', () => setFolderDetails(!folderUi.open));
+$('p-direct').addEventListener('click', () => state.current && showVideo(state.current, 'direct'));
+$('p-drive').addEventListener('click', () => state.current && showVideo(state.current, 'drive'));
 
 // Close the folder's Suggest menu on a click elsewhere or Escape.
 document.addEventListener('click', (e) => {

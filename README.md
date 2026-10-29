@@ -22,7 +22,9 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 - Tag suggestions from Claude (product, activity, color, vehicle, season, keywords) that you accept or dismiss
 - Star ratings (one per photo for the team), personal favorites, and team collections
 - Shareable links: the URL always reflects the current folder, filters, search and open asset
-- Preview images and stream videos (with seeking) in the browser
+- Preview images and stream videos (with seeking) in the browser; videos the browser can't play
+  (H.265/HEVC, some MOVs) switch to Google Drive's own player, which streams any format Drive has
+  processed for people who can open the file in Drive (an **Original / Drive player** switch is in the viewer)
 - Download originals, open in Drive, copy a direct link
 - Usage-rights flags: mark a file or a whole folder **Do not use** (with a note), filter by rights
 - Auto re-sync every 10 minutes, plus a manual **Sync** button
