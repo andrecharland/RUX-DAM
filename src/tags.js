@@ -18,6 +18,9 @@ const DEFAULT_FIELDS = [
   { key: 'format', label: 'Format', suggest: ['Carousel', 'Feed Video', 'Reels', 'Static'] },
   { key: 'aspect', label: 'Aspect', suggest: ['9x16', '4x5', '1x1', '1.91x1', '16x9', '4x1'] },
   { key: 'creator', label: 'Creator' },
+  // Product line season the asset belongs to (not the weather in the photo; that's Season).
+  { key: 'collection', label: 'Collection season',
+    suggest: ['Spring/Summer 26', 'Fall/Winter 26', 'Spring/Summer 27', 'Fall/Winter 27'] },
 ];
 
 // Label parts that are also tag fields.

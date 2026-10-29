@@ -13,8 +13,8 @@ assets, do it in Drive and the DAM picks it up on the next sync.
 - Viewer with previous/next (arrow keys), a filmstrip, zoom to 100%/200% (Z, drag to pan),
   **More from this shoot** and **More like this**
 - Visual similarity and search by description with Vertex AI (optional)
-- Metadata fields (Product, Activity, Color, Vehicle, Season, Event, Location, People,
-  Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
+- Metadata fields (Product, Activity, Color, Vehicle, Season, Collection season, Event, Location,
+  People, Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
 - Search by file name, folder path or metadata; filter by type (image or video)
 - Filter by file details: date taken (presets or a custom range), year, format (JPG, RAW, HEIC,
   MP4, MOV…), orientation, resolution, file size, video length and camera; sort by date taken,

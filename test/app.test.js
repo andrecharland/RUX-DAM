@@ -184,6 +184,7 @@ test('metadata: folder tags inherit, file tags add, filters and facets', async (
     const fields = await (await fetch(`${base}/api/fields`)).json();
     assert.deepStrictEqual(fields.map((f) => f.key).slice(0, 6), ['product', 'activity', 'color', 'vehicle', 'season', 'event']);
     assert.ok(fields.find((f) => f.key === 'season').values.includes('Winter'), 'season suggestions');
+    assert.ok(fields.find((f) => f.key === 'collection').values.includes('Fall/Winter 26'), 'collection season presets');
 
     // Tag a folder, then a file, then several files at once.
     assert.strictEqual((await post(`${base}/api/tags`, { ids: ['root'], add: { event: ['Sea Otter 2026'] } })).status, 200);

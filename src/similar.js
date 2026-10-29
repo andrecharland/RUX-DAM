@@ -5,7 +5,7 @@ const { assetDate } = require('./fileinfo');
 // How much a shared tag value counts toward "similar".
 const WEIGHTS = {
   product: 3, concept: 2, color: 2, activity: 2, vehicle: 2, event: 2, format: 1, aspect: 1,
-  season: 1, location: 1, creator: 1, people: 1, tags: 1,
+  season: 1, collection: 2, location: 1, creator: 1, people: 1, tags: 1,
 };
 
 // Without visual fingerprints: assets ranked by shared tags, the same shoot
