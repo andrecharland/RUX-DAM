@@ -505,7 +505,7 @@ function dateSpan(from, to) {
   return `${from.slice(0, 4)} – ${to.slice(0, 4)}`;
 }
 
-function folderCard(f) {
+function folderCard(f, { where } = {}) {
   const covers = [0, 1, 2].map((i) => el('div', {}, f.covers?.[i]
     ? [el('img', { src: `/api/assets/${f.covers[i]}/thumbnail?size=${i ? 300 : 600}`, alt: '', loading: 'lazy' })] : []));
   const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
@@ -520,6 +520,7 @@ function folderCard(f) {
     ]),
     el('div', { class: 'fbody' }, [
       el('strong', { text: displayName(f) }),
+      where ? el('span', { class: 'fpath', text: where }) : '',
       meta ? el('span', { class: 'fmeta', text: meta }) : '',
       tagValues.length ? el('div', { class: 'ftags' }, tagValues.map((v) => el('span', { text: v }))) : '',
       f.suggestions?.count ? el('span', { class: 'fmeta', style: 'color: var(--ai)', text: `✨ ${f.suggestions.count} shoot tags to review` }) : '',
@@ -527,29 +528,60 @@ function folderCard(f) {
   ]);
 }
 
-// Subfolders of the open folder (top-level folders at the start) as cards
-// with covers, newest shoots first. Hidden while searching or filtering.
+// Folder cards, hidden while searching or filtering. "By date": every folder
+// that holds files, at any depth under the open folder, ordered by when its
+// files were taken (median, so a few stray old files don't move it), newest
+// first, with its own files' counts. "By folder": the open folder's subfolders.
+let folderView = 'date';
+try { folderView = localStorage.getItem('rux-dam-folder-view') || 'date'; } catch {}
+
 function renderFolderCards() {
   const box = $('folder-cards');
   const filtering = state.q || state.like || state.kind || state.rights || state.suggested || state.range ||
     state.tags.size || state.file.size;
+  const folders = [...state.folders.values()];
   // With a single indexed root folder (e.g. Photo/Video), start from its subfolders.
-  const roots = [...state.folders.values()].filter((f) => !f.parentId);
+  const roots = folders.filter((f) => !f.parentId);
   const parentId = state.folder || (roots.length === 1 ? roots[0].id : null);
-  const kids = [...state.folders.values()].filter((f) => f.parentId === parentId && f.count > 0);
-  if (filtering || !kids.length) {
+  let cards;
+  if (folderView === 'date') {
+    const inside = (f) => f.id !== state.folder && (!state.folder || f.ancestors.some((a) => a.id === state.folder));
+    cards = folders.filter((f) => f.direct?.count > 0 && inside(f))
+      .sort((a, b) => (b.direct.date || '').localeCompare(a.direct.date || '') || byName(a, b))
+      .map((f) => {
+        const parent = f.parentId && state.folders.get(f.parentId);
+        const where = parent && parent.parentId && parent.id !== state.folder ? `in ${displayName(parent)}` : '';
+        return [{ ...f, ...f.direct }, { where }];
+      });
+  } else {
+    cards = folders.filter((f) => f.parentId === parentId && f.count > 0)
+      .sort((a, b) => (b.to || '').localeCompare(a.to || '') || byName(a, b))
+      .map((f) => [f, {}]);
+  }
+  if (filtering || !cards.length) {
     box.hidden = true;
     box.replaceChildren();
     return;
   }
-  kids.sort((a, b) => (b.to || '').localeCompare(a.to || '') || byName(a, b));
-  const shown = state.showAllFolders ? kids : kids.slice(0, 12);
+  const scope = parentId ? displayName(state.folders.get(parentId)) : '';
+  const title = folderView === 'date' ? (state.folder ? `Shoots in ${scope}, newest first` : 'Shoots, newest first')
+    : (parentId ? `Folders in ${scope}` : 'Folders');
+  const toggle = el('div', { class: 'zoom fview', role: 'group', 'aria-label': 'Folder view' },
+    [['date', 'By date'], ['tree', 'By folder']].map(([v, text]) => el('button', {
+      type: 'button', text, 'aria-pressed': String(folderView === v),
+      onclick: () => {
+        folderView = v;
+        try { localStorage.setItem('rux-dam-folder-view', v); } catch {}
+        renderFolderCards();
+      },
+    })));
+  const shown = state.showAllFolders ? cards : cards.slice(0, 12);
   box.hidden = false;
   box.replaceChildren(
-    el('h2', { text: parentId ? `Folders in ${displayName(state.folders.get(parentId))}` : 'Folders' }),
-    el('div', { class: 'fcards' }, shown.map(folderCard)),
-    kids.length > 12 ? el('button', {
-      type: 'button', class: 'link more', text: state.showAllFolders ? 'Show fewer folders' : `Show all ${kids.length} folders`,
+    el('div', { class: 'fhead' }, [el('h2', { text: title }), toggle]),
+    el('div', { class: 'fcards' }, shown.map(([f, opts]) => folderCard(f, opts))),
+    cards.length > 12 ? el('button', {
+      type: 'button', class: 'link more', text: state.showAllFolders ? 'Show fewer' : `Show all ${cards.length}`,
       onclick: () => { state.showAllFolders = !state.showAllFolders; renderFolderCards(); },
     }) : '',
   );

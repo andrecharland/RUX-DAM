@@ -126,7 +126,12 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 
 /* Folder and shoot cards */
 .folder-cards { margin: 16px 16px 4px; }
-.folder-cards h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+.folder-cards h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; }
+.fhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.zoom.fview { font-size: 12px; background: var(--chip); }
+.zoom.fview button { color: var(--text); }
+.zoom.fview button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.fpath { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fcards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .fcard {
   all: unset; cursor: pointer; box-sizing: border-box; display: flex; flex-direction: column;

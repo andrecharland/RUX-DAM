@@ -80,6 +80,9 @@ test('lists, searches and filters assets', async () => {
       [{ id: 'fPhotos', parentId: 'root', count: 1 }, { id: 'fVideos', parentId: 'root', count: 1 },
         { id: 'root', parentId: null, count: 2 }],
     );
+    // Files directly inside: the shoot folders have them, the root only through its subfolders.
+    assert.deepStrictEqual(folders.map((f) => f.direct.count), [1, 1, 0]);
+    assert.ok(folders[0].direct.date, 'shoot date');
 
     const inPhotos = await (await fetch(`${base}/api/assets?folder=fPhotos`)).json();
     assert.deepStrictEqual(inPhotos.items.map((a) => a.id), ['img1']);

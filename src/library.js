@@ -181,24 +181,39 @@ class Library extends EventEmitter {
     };
   }
 
-  // Every folder with its parent and how many assets it contains (recursively).
   // Every folder with what a folder card needs: asset counts (recursive), the
   // date range of what's inside, and up to 3 recent photos for its cover.
+  // `direct` is the same for only the files directly in the folder, plus their
+  // median date, so shoots can be ordered by when they happened.
   folderList() {
+    const blank = () => ({ count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] });
     const stats = new Map();
+    const direct = new Map();
+    const add = (map, id, a, date) => {
+      const s = map.get(id) || blank();
+      s.count++;
+      s[a.kind === 'video' ? 'videos' : 'photos']++;
+      if (date && (!s.from || date < s.from)) s.from = date;
+      if (date && date > s.to) s.to = date;
+      if (a.hasThumbnail && s.covers.length < 3) s.covers.push(a.id);
+      map.set(id, s);
+      return s;
+    };
     for (const a of this.assets) {
       const date = assetDate(a).slice(0, 10);
-      for (const f of a.ancestors) {
-        const s = stats.get(f.id) || { count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] };
-        s.count++;
-        s[a.kind === 'video' ? 'videos' : 'photos']++;
-        if (date && (!s.from || date < s.from)) s.from = date;
-        if (date && date > s.to) s.to = date;
-        if (a.hasThumbnail && s.covers.length < 3) s.covers.push(a.id);
-        stats.set(f.id, s);
+      for (const f of a.ancestors) add(stats, f.id, a, date);
+      const parent = a.ancestors[a.ancestors.length - 1];
+      if (parent) {
+        const s = add(direct, parent.id, a, date);
+        if (date) (s.dates ||= []).push(date);
       }
     }
-    const empty = { count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] };
+    for (const s of direct.values()) {
+      const dates = (s.dates || []).sort();
+      s.date = dates[Math.floor(dates.length / 2)] || '';
+      delete s.dates;
+    }
+    const empty = blank();
     return [...this.folders.values()].map((f) => ({
       id: f.id,
       name: f.name,
@@ -206,6 +221,7 @@ class Library extends EventEmitter {
       parentId: f.ancestors.length ? f.ancestors[f.ancestors.length - 1].id : null,
       ancestors: f.ancestors,
       ...(stats.get(f.id) || empty),
+      direct: direct.get(f.id) || { ...empty, date: '' },
       tags: this.tags.own(f.id),
       label: this.tags.label(f.id),
       rights: this.rights.get(f.id),
