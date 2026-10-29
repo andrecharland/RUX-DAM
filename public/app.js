@@ -12,6 +12,7 @@ const state = {
   offset: 0, total: 0, loading: false, items: new Map(), facets: {},
   current: null, selected: new Set(), lastPicked: null,
   fields: [], folders: new Map(), expanded: new Set(), facetsOpen: new Set(),
+  like: '', likeName: '', similarMode: '', months: null, zoom: 0, showAllFolders: false,
 };
 
 // ---------- helpers ----------
@@ -81,7 +82,7 @@ function dateRange() {
 function queryParams(extra = {}) {
   const params = new URLSearchParams({
     q: state.q, kind: state.kind, rights: state.rights, folder: state.folder, suggested: state.suggested,
-    sort: state.sort, ...dateRange(),
+    sort: state.sort, like: state.like, ...dateRange(),
   });
   for (const t of state.tags) params.append('tag', t);
   for (const f of state.file) params.append('f', f);
@@ -95,7 +96,7 @@ function queryParams(extra = {}) {
 // so copying it shares exactly what's on screen.
 function writeUrl() {
   const params = new URLSearchParams();
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range']) if (state[key]) params.set(key, state[key]);
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'like']) if (state[key]) params.set(key, state[key]);
   if (state.range === 'custom') {
     if (state.from) params.set('from', state.from);
     if (state.to) params.set('to', state.to);
@@ -110,7 +111,7 @@ function writeUrl() {
 // Reads the view from the URL; returns the asset to open, if any.
 function readUrl() {
   const params = new URLSearchParams(location.search);
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'from', 'to']) state[key] = params.get(key) || '';
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'from', 'to', 'like']) state[key] = params.get(key) || '';
   state.tags = new Set(params.getAll('tag'));
   state.file = new Set(params.getAll('f'));
   $('sort').value = state.sort;
@@ -213,6 +214,7 @@ async function loadFolders() {
   renderTree();
   renderCrumbs();
   renderFolderPanel();
+  renderFolderCards();
 }
 
 function renderTree() {
@@ -326,37 +328,231 @@ function renderFolderPanel() {
 
 // ---------- grid ----------
 
+// One tile: its width follows the photo's shape (--ar), its height the size slider.
 function card(asset) {
-  const thumb = el('div', { class: 'thumb' });
-  if (asset.hasThumbnail) {
-    thumb.append(el('img', { src: `/api/assets/${asset.id}/thumbnail`, loading: 'lazy', alt: asset.name }));
-  } else {
-    thumb.append(el('span', { text: asset.kind === 'video' ? '▶ Video' : 'No preview' }));
-  }
-  if (asset.kind === 'video') {
-    thumb.append(el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }));
-  }
+  const ar = asset.width && asset.height ? Math.min(Math.max(asset.width / asset.height, 0.4), 3) : 1;
   const restricted = asset.rights.status === 'restricted';
-  if (restricted) thumb.append(el('span', { class: 'flag', text: 'Do not use' }));
   const selected = state.selected.has(asset.id);
   const values = Object.values(asset.tags).flat().map((t) => t.value);
+  const creator = creatorOf(asset);
+  const where = [asset.collection, asset.path].filter(Boolean).join(' / ');
   return el('div', {
     class: ['card', restricted && 'restricted', selected && 'selected'].filter(Boolean).join(' '),
-    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': asset.name,
+    tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset), style: `--ar: ${ar.toFixed(3)}`,
   }, [
-    el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${asset.name}`, checked: selected }),
-    thumb,
-    el('div', { class: 'caption' }, [
-      el('div', { class: 'name', text: displayName(asset), title: asset.label ? `${asset.label.name}\nDrive file: ${asset.name}` : asset.name }),
-      el('div', { class: 'path', text: [creatorOf(asset) && `by ${creatorOf(asset)}`, [asset.collection, asset.path].filter(Boolean).join(' / ')].filter(Boolean).join(' · ') }),
-      values.length ? el('div', { class: 'chips-line', text: values.join(' · '), title: values.join(', ') }) : '',
-      asset.suggestions?.count ? el('div', {
-        class: 'ai-line',
-        text: `✨ ${Object.values(asset.suggestions.pending).flat().join(' · ')}`,
-        title: 'Suggested by Claude, not yet accepted',
-      }) : '',
+    el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected }),
+    asset.hasThumbnail
+      ? el('img', { src: `/api/assets/${asset.id}/thumbnail?size=600`, loading: 'lazy', alt: '' })
+      : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
+    restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
+    asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',
+    asset.suggestions?.count ? el('span', { class: 'ai-dot', text: `✨ ${asset.suggestions.count}`, title: 'Suggestions from Claude to review' }) : '',
+    el('div', { class: 'info' }, [
+      el('div', { text: displayName(asset) }),
+      el('div', { class: 'sub', text: [creator && `by ${creator}`, where].filter(Boolean).join(' · ') }),
+      values.length ? el('div', { class: 'sub', text: values.join(' · ') }) : '',
+      asset.suggestions?.count ? el('div', { class: 'ai', text: `✨ ${Object.values(asset.suggestions.pending).flat().join(' · ')}` }) : '',
     ]),
   ]);
+}
+
+// Results are grouped under headings: by month when sorted by a date, "Looks
+// like …" for similar and visual matches, none for other sorts.
+const DATE_OF = {
+  '': (a) => a.modifiedTime,
+  added: (a) => a.createdTime,
+  taken: (a) => a.takenTime || a.createdTime || a.modifiedTime,
+  'taken-asc': (a) => a.takenTime || a.createdTime || a.modifiedTime,
+};
+const monthName = (key, month = 'long') => new Date(`${key}-01T12:00:00`).toLocaleDateString(undefined, { month, year: 'numeric' });
+
+function groupOf(a) {
+  if (a.match === 'visual') return { key: 'visual', title: `Looks like “${state.q}”`, meta: 'Matched by what’s in the photo' };
+  if (state.like) {
+    return {
+      key: 'like',
+      title: `Looks like ${state.likeName || 'this asset'}`,
+      meta: state.similarMode === 'visual' ? 'Most similar first' : 'By shared tags, shoot and date (visual fingerprints aren’t ready yet)',
+    };
+  }
+  const dateOf = DATE_OF[state.sort];
+  if (!dateOf) return { key: 'all' };
+  const month = (dateOf(a) || '').slice(0, 7);
+  const n = state.months?.[month || 'undated'];
+  return {
+    key: month || 'undated',
+    title: month ? monthName(month) : 'No date',
+    meta: n ? `${n.toLocaleString()} ${n === 1 ? 'item' : 'items'}` : '',
+  };
+}
+
+function appendCards(items) {
+  for (const a of items) {
+    const g = groupOf(a);
+    let section = grid.lastElementChild;
+    if (!section || section.dataset.key !== g.key) {
+      section = el('section', { class: 'group', 'data-key': g.key }, [
+        g.title ? el('div', { class: 'group-head' }, [el('h2', { text: g.title }), g.meta ? el('span', { class: 'gmeta', text: g.meta }) : '']) : '',
+        el('div', { class: 'rows' }),
+      ]);
+      grid.append(section);
+    }
+    section.querySelector('.rows').append(card(a));
+  }
+}
+
+// ---------- active filter chips ----------
+
+function rangeLabel() {
+  if (state.range !== 'custom') return $('date-range').selectedOptions[0]?.text || state.range;
+  return `${state.from || '…'} – ${state.to || '…'}`;
+}
+
+function clearAllFilters() {
+  state.q = state.like = state.likeName = state.kind = state.rights = state.suggested = '';
+  state.range = state.from = state.to = '';
+  state.tags.clear();
+  state.file.clear();
+  for (const id of ['q', 'kind', 'rights', 'suggested', 'date-range']) $(id).value = '';
+  $('date-custom').hidden = true;
+}
+
+function renderChips() {
+  const chips = [];
+  const add = (key, value, remove) => chips.push(el('span', { class: 'fchip' }, [
+    el('span', { class: 'k', text: `${key}:` }),
+    el('span', { class: 'v', text: value, title: value }),
+    el('button', { type: 'button', 'aria-label': `Remove ${key} ${value}`, text: '×', onclick: () => { remove(); load(true); } }),
+  ]));
+  if (state.q) add('Search', `“${state.q}”`, () => { state.q = ''; $('q').value = ''; });
+  if (state.like) add('Looks like', state.likeName || 'asset', () => { state.like = state.likeName = ''; });
+  if (state.kind) add('Type', state.kind === 'video' ? 'Videos' : 'Images', () => { state.kind = ''; $('kind').value = ''; });
+  if (state.rights) add('Rights', state.rights === 'cleared' ? 'Cleared to use' : 'Do not use', () => { state.rights = ''; $('rights').value = ''; });
+  if (state.suggested) add('Claude', 'Suggestions to review', () => { state.suggested = ''; $('suggested').value = ''; });
+  if (state.range) {
+    add('Taken', rangeLabel(), () => {
+      state.range = state.from = state.to = '';
+      $('date-range').value = '';
+      $('date-custom').hidden = true;
+    });
+  }
+  const split = (id) => [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  for (const t of state.tags) {
+    const [k, v] = split(t);
+    add(fieldLabel(k), v, () => state.tags.delete(t));
+  }
+  for (const f of state.file) {
+    const [k, v] = split(f);
+    add(FILE_FACETS.find((x) => x.key === k)?.label || k, v, () => state.file.delete(f));
+  }
+  if (chips.length > 1) {
+    chips.push(el('button', { type: 'button', class: 'link', text: 'Clear all', onclick: () => { clearAllFilters(); load(true); } }));
+  }
+  $('chips').replaceChildren(...chips);
+}
+
+// ---------- jump to date ----------
+
+function renderScrubber() {
+  const nav = $('scrubber');
+  const keys = state.months ? Object.keys(state.months).filter((k) => k !== 'undated').sort() : [];
+  if (state.sort !== 'taken-asc') keys.reverse();
+  if (keys.length < 3 || state.like) {
+    nav.hidden = true;
+    return;
+  }
+  // The 12 most recent months one by one, older ones by year.
+  const items = [];
+  let year = '';
+  keys.forEach((k, i) => {
+    const y = k.slice(0, 4);
+    if (y !== year) {
+      items.push({ key: y, label: y, year: true });
+      year = y;
+    }
+    if (i < 12) items.push({ key: k, label: monthName(k, 'short').replace(/\s*\d{4}$/, '') });
+  });
+  nav.hidden = false;
+  nav.replaceChildren(...items.map((it) => el('button', {
+    type: 'button', class: it.year ? 'year' : '', text: it.label,
+    'aria-label': it.year ? it.label : monthName(it.key), onclick: () => jumpTo(it.key),
+  })));
+}
+
+// Scrolls to a month or year, loading further pages until it's there.
+async function jumpTo(prefix) {
+  for (let i = 0; i < 40; i++) {
+    const section = [...grid.querySelectorAll('.group')].find((g) => g.dataset.key.startsWith(prefix));
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (state.offset >= state.total) return;
+    if (state.loading) await new Promise((r) => setTimeout(r, 100));
+    else await load();
+  }
+}
+
+// ---------- folder and shoot cards ----------
+
+function dateSpan(from, to) {
+  if (!from) return '';
+  const d = (x, opts) => new Date(`${x}T12:00:00`).toLocaleDateString(undefined, opts);
+  const a = d(from, { month: 'short', year: 'numeric' });
+  const b = d(to, { month: 'short', year: 'numeric' });
+  if (a === b) return a;
+  if (from.slice(0, 4) === to.slice(0, 4)) return `${d(from, { month: 'short' })} – ${b}`;
+  return `${from.slice(0, 4)} – ${to.slice(0, 4)}`;
+}
+
+function folderCard(f) {
+  const covers = [0, 1, 2].map((i) => el('div', {}, f.covers?.[i]
+    ? [el('img', { src: `/api/assets/${f.covers[i]}/thumbnail?size=${i ? 300 : 600}`, alt: '', loading: 'lazy' })] : []));
+  const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+  const meta = [dateSpan(f.from, f.to), f.photos ? plural(f.photos, 'photo') : '', f.videos ? plural(f.videos, 'video') : '']
+    .filter(Boolean).join(' · ');
+  const tagValues = Object.values(f.tags || {}).flat().slice(0, 3);
+  return el('button', { type: 'button', class: 'fcard', title: f.path || f.name, onclick: () => selectFolder(f.id) }, [
+    el('div', { class: 'fcover' }, [
+      ...covers,
+      f.restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
+      el('span', { class: 'count', text: f.count.toLocaleString() }),
+    ]),
+    el('div', { class: 'fbody' }, [
+      el('strong', { text: displayName(f) }),
+      meta ? el('span', { class: 'fmeta', text: meta }) : '',
+      tagValues.length ? el('div', { class: 'ftags' }, tagValues.map((v) => el('span', { text: v }))) : '',
+      f.suggestions?.count ? el('span', { class: 'fmeta', style: 'color: var(--ai)', text: `✨ ${f.suggestions.count} shoot tags to review` }) : '',
+    ]),
+  ]);
+}
+
+// Subfolders of the open folder (top-level folders at the start) as cards
+// with covers, newest shoots first. Hidden while searching or filtering.
+function renderFolderCards() {
+  const box = $('folder-cards');
+  const filtering = state.q || state.like || state.kind || state.rights || state.suggested || state.range ||
+    state.tags.size || state.file.size;
+  // With a single indexed root folder (e.g. Photo/Video), start from its subfolders.
+  const roots = [...state.folders.values()].filter((f) => !f.parentId);
+  const parentId = state.folder || (roots.length === 1 ? roots[0].id : null);
+  const kids = [...state.folders.values()].filter((f) => f.parentId === parentId && f.count > 0);
+  if (filtering || !kids.length) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  kids.sort((a, b) => (b.to || '').localeCompare(a.to || '') || byName(a, b));
+  const shown = state.showAllFolders ? kids : kids.slice(0, 12);
+  box.hidden = false;
+  box.replaceChildren(
+    el('h2', { text: parentId ? `Folders in ${displayName(state.folders.get(parentId))}` : 'Folders' }),
+    el('div', { class: 'fcards' }, shown.map(folderCard)),
+    kids.length > 12 ? el('button', {
+      type: 'button', class: 'link more', text: state.showAllFolders ? 'Show fewer folders' : `Show all ${kids.length} folders`,
+      onclick: () => { state.showAllFolders = !state.showAllFolders; renderFolderCards(); },
+    }) : '',
+  );
 }
 
 function renderMeta() {
@@ -377,6 +573,7 @@ async function watchSync() {
     return;
   }
   $('storage-warning').hidden = status.storage !== 'memory';
+  if (status.similarity?.mode === 'visual') $('q').placeholder = 'Search names, tags, or describe a photo…';
   const waiting = status.syncing && (!status.lastSync || status.restoredFrom);
   state.indexing = status.syncing && !status.lastSync;
   renderMeta();
@@ -399,20 +596,23 @@ async function load(reset = false) {
     state.items.clear();
     grid.replaceChildren();
     writeUrl();
+    renderChips();
+    renderFolderCards();
   }
   try {
     const data = await api(`/api/assets?${queryParams({ offset: state.offset, limit: PAGE })}`);
     state.total = data.total;
     state.offset += data.items.length;
-    for (const a of data.items) {
-      state.items.set(a.id, a);
-      grid.append(card(a));
-    }
+    state.months = data.months;
+    state.similarMode = data.similarMode || '';
+    for (const a of data.items) state.items.set(a.id, a);
+    appendCards(data.items);
     state.facets = data.facets;
     state.fileFacets = data.fileFacets || {};
     state.fileOrder = data.fileOrder || {};
     renderMeta();
     renderFacets();
+    if (reset) renderScrubber();
   } finally {
     state.loading = false;
   }
@@ -427,9 +627,13 @@ async function reloadInPlace() {
   state.items = new Map(data.items.map((a) => [a.id, a]));
   state.facets = data.facets;
   state.fileFacets = data.fileFacets || {};
-  grid.replaceChildren(...data.items.map(card));
+  state.months = data.months;
+  state.similarMode = data.similarMode || '';
+  grid.replaceChildren();
+  appendCards(data.items);
   renderMeta();
   renderFacets();
+  renderScrubber();
 }
 
 async function afterEdit() {
@@ -835,7 +1039,7 @@ function placeZones() {
   const media = $('stage').firstElementChild;
   const asset = state.current;
   if (!zones || !media || !asset) return;
-  zones.hidden = !(state.zones && RuxSpecs.isVertical(asset.width, asset.height));
+  zones.hidden = !(state.zones && !state.zoom && RuxSpecs.isVertical(asset.width, asset.height));
   if (zones.hidden) return;
   const stage = $('stage').getBoundingClientRect();
   const box = media.getBoundingClientRect();
@@ -944,8 +1148,96 @@ function open(asset) {
   renderSuggestions(asset);
   renderViewerTags(asset);
   renderRights(asset);
-  viewer.showModal();
+  setZoom(0);
+  renderNav();
+  renderRelated(asset);
+  if (!viewer.open) viewer.showModal();
   writeUrl();
+}
+
+// ---------- viewer: next/previous, filmstrip, zoom, related ----------
+
+const itemList = () => [...state.items.values()];
+const viewerIndex = () => itemList().findIndex((a) => a.id === state.current?.id);
+
+// Moves through the current results, loading the next page at the end.
+async function step(delta) {
+  let list = itemList();
+  const i = viewerIndex();
+  if (i < 0) return;
+  if (delta > 0 && i + 1 >= list.length && state.offset < state.total) {
+    await load();
+    list = itemList();
+  }
+  if (list[i + delta]) open(list[i + delta]);
+}
+
+function renderNav() {
+  const list = itemList();
+  const i = viewerIndex();
+  $('v-prev').disabled = i <= 0;
+  $('v-next').disabled = i < 0 || (i >= list.length - 1 && state.offset >= state.total);
+  $('v-pos').textContent = i >= 0 ? `${(i + 1).toLocaleString()} of ${state.total.toLocaleString()}` : '';
+  const near = i >= 0 ? list.slice(Math.max(0, i - 7), i + 8) : [state.current];
+  $('filmstrip').replaceChildren(...near.map((a) => {
+    const ar = a.width && a.height ? Math.min(Math.max(a.width / a.height, 0.4), 3) : 1;
+    return el('button', {
+      type: 'button', class: a.id === state.current.id ? 'current' : '', style: `width: ${Math.round(52 * ar)}px`,
+      'aria-label': `Show ${displayName(a)}`, 'aria-current': a.id === state.current.id ? 'true' : false,
+      onclick: () => open(a),
+    }, [a.hasThumbnail ? el('img', { src: `/api/assets/${a.id}/thumbnail?size=200`, alt: '', loading: 'lazy' }) : '']);
+  }));
+  $('filmstrip').querySelector('.current')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+// Zoom 0 = fit, 1 = 100% of the preview, 2 = 200%. Photos only.
+function setZoom(level) {
+  const stage = $('stage');
+  const img = stage.querySelector('img');
+  const photo = state.current?.kind !== 'video' && img;
+  if (!photo) level = 0;
+  state.zoom = level;
+  for (const [id, l] of [['z-fit', 0], ['z-100', 1], ['z-200', 2]]) {
+    $(id).setAttribute('aria-pressed', String(level === l));
+    $(id).disabled = !photo;
+  }
+  stage.classList.toggle('zoomed', level > 0);
+  if (img) {
+    img.style.width = level ? `${img.naturalWidth * level}px` : '';
+    if (level) {
+      const box = stage.getBoundingClientRect();
+      stage.scrollLeft = (img.naturalWidth * level - box.width) / 2;
+      stage.scrollTop = (img.naturalHeight * level - box.height) / 2;
+    }
+  }
+  placeZones();
+}
+
+const relatedThumbs = (list) => (list.length
+  ? list.map((a) => el('button', { type: 'button', title: displayName(a), 'aria-label': `Open ${displayName(a)}`, onclick: () => open(a) },
+    [a.hasThumbnail ? el('img', { src: `/api/assets/${a.id}/thumbnail?size=300`, alt: '', loading: 'lazy' }) : '']))
+  : [el('p', { class: 'empty-note', text: 'Nothing else yet.' })]);
+
+// "More from this shoot" (same folder) and "More like this" (visual or tag similarity).
+async function renderRelated(asset) {
+  const id = asset.id;
+  const parent = asset.ancestors[asset.ancestors.length - 1];
+  $('d-shoot').replaceChildren();
+  $('d-like').replaceChildren();
+  $('d-shoot-all').hidden = !parent;
+  const [shoot, like] = await Promise.all([
+    parent ? api(`/api/assets?folder=${encodeURIComponent(parent.id)}&limit=7`).catch(() => null) : null,
+    api(`/api/similar/${encodeURIComponent(id)}?limit=12`).catch(() => null),
+  ]);
+  if (state.current?.id !== id) return;
+  const shootItems = (shoot?.items || []).filter((a) => a.id !== id).slice(0, 6);
+  $('d-shoot').replaceChildren(...relatedThumbs(shootItems));
+  if (shoot) $('d-shoot-all').textContent = `See all ${shoot.total.toLocaleString()}`;
+  if (like) {
+    $('d-like-title').textContent = like.mode === 'visual' ? 'More like this' : 'More like this (by tags)';
+    const seen = new Set(shootItems.map((a) => a.id));
+    $('d-like').replaceChildren(...relatedThumbs(like.items.filter((a) => !seen.has(a.id)).slice(0, 6)));
+  }
 }
 
 // ---------- events ----------
@@ -982,6 +1274,72 @@ document.addEventListener('keydown', (e) => {
 });
 
 $('close').addEventListener('click', () => viewer.close());
+$('v-prev').addEventListener('click', () => step(-1));
+$('v-next').addEventListener('click', () => step(1));
+$('z-fit').addEventListener('click', () => setZoom(0));
+$('z-100').addEventListener('click', () => setZoom(1));
+$('z-200').addEventListener('click', () => setZoom(2));
+viewer.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea, select, video, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+  else if (e.key === 'z' || e.key === 'Z') setZoom(state.zoom ? 0 : 1);
+});
+// Zoomed photos pan by dragging; a click without dragging toggles fit / 100%.
+{
+  const stage = $('stage');
+  let drag = null;
+  let moved = false;
+  stage.addEventListener('pointerdown', (e) => {
+    moved = false;
+    if (!state.zoom) return;
+    drag = { x: e.clientX, y: e.clientY, left: stage.scrollLeft, top: stage.scrollTop };
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add('dragging');
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+    stage.scrollLeft = drag.left - dx;
+    stage.scrollTop = drag.top - dy;
+  });
+  const end = () => { drag = null; stage.classList.remove('dragging'); };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  stage.addEventListener('click', (e) => {
+    if (e.target.tagName === 'IMG' && !moved) setZoom(state.zoom ? 0 : 1);
+  });
+}
+$('d-shoot-all').addEventListener('click', () => {
+  const parent = state.current?.ancestors.at(-1);
+  if (!parent) return;
+  viewer.close();
+  clearAllFilters();
+  selectFolder(parent.id);
+});
+$('d-like-all').addEventListener('click', () => {
+  const asset = state.current;
+  if (!asset) return;
+  viewer.close();
+  state.like = asset.id;
+  state.likeName = displayName(asset);
+  load(true);
+});
+// Thumbnail size (kept per browser).
+{
+  const KEY = 'rux-dam-row-h';
+  let rowH = window.innerWidth < 720 ? 140 : 200;
+  try { rowH = Number(localStorage.getItem(KEY)) || rowH; } catch { /* storage unavailable */ }
+  const apply = (v) => grid.style.setProperty('--row-h', `${v}px`);
+  $('size').value = rowH;
+  apply(rowH);
+  $('size').addEventListener('input', (e) => {
+    apply(e.target.value);
+    try { localStorage.setItem(KEY, e.target.value); } catch { /* storage unavailable */ }
+  });
+}
 viewer.addEventListener('close', () => {
   $('stage').replaceChildren();
   writeUrl();
@@ -1155,6 +1513,11 @@ async function showUser() {
 (async () => {
   showUser();
   const assetId = readUrl();
+  if (state.like) {
+    api(`/api/assets/${encodeURIComponent(state.like)}`)
+      .then((a) => { state.likeName = displayName(a); renderChips(); })
+      .catch(() => {});
+  }
   await Promise.all([loadFields(), loadFolders(), refreshAi()]);
   watchSync();
   await load(true);

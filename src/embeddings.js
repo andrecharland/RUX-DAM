@@ -202,8 +202,9 @@ class EmbeddingIndex {
     return v ? this.rank(v, { limit, exclude: id }) : null;
   }
 
-  // Assets that look like a text description.
-  async searchText(query, limit = 60) {
+  // Assets that look like a text description: up to `limit`, keeping only those
+  // scoring within reach of the best match so weak matches don't pad results.
+  async searchText(query, limit = 60, { relative = 0.75 } = {}) {
     const key = query.trim().toLowerCase();
     let v = this.textCache.get(key);
     if (!v) {
@@ -211,7 +212,10 @@ class EmbeddingIndex {
       this.textCache.set(key, v);
       if (this.textCache.size > 200) this.textCache.delete(this.textCache.keys().next().value);
     }
-    return this.rank(v, { limit });
+    const ranked = this.rank(v, { limit });
+    const top = ranked.values().next().value;
+    if (!(top > 0)) return ranked;
+    return new Map([...ranked].filter(([, score]) => score >= top * relative));
   }
 }
 

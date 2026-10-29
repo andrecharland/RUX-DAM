@@ -6,8 +6,13 @@ searchable web gallery. Drive stays the source of truth: to add, rename or delet
 assets, do it in Drive and the DAM picks it up on the next sync.
 
 **Features**
-- Grid of all images and videos with thumbnails, infinite scroll
-- Browse by the Google Drive folder tree, with asset counts per folder
+- Justified grid that keeps each photo's shape, grouped by month, with a size slider and a
+  jump-to-date scrubber; infinite scroll
+- Browse by the Google Drive folder tree, or by shoot cards with cover photos and date spans
+- Active filters shown as removable chips above the grid, with **Clear all**
+- Viewer with previous/next (arrow keys), a filmstrip, zoom to 100%/200% (Z, drag to pan),
+  **More from this shoot** and **More like this**
+- Visual similarity and search by description with Vertex AI (optional)
 - Metadata fields (Product, Activity, Color, Vehicle, Season, Event, Location, People,
   Tags, plus your own) on files or whole folders, with bulk tagging and sidebar filters
 - Search by file name, folder path or metadata; filter by type (image or video)
@@ -65,6 +70,10 @@ The server only serves files that are in the index.
 | `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-haiku-5-5` (`claude-sonnet-5-5` or `claude-opus-5-5` for higher accuracy at higher cost) |
 | `SUGGEST_FIELDS` | no | Fields Claude fills in, default `product,activity,color,vehicle,season,tags` |
 | `SUGGEST_CONCURRENCY` | no | Images sent to Claude in parallel, default `4` |
+| `VERTEX_EMBEDDINGS` | no | `on` turns on visual similarity and search by description (see below) |
+| `VERTEX_LOCATION` | no | Vertex AI region, default `us-central1` |
+| `VERTEX_RPM` | no | Fingerprinting requests per minute, default `100` |
+| `GOOGLE_CLOUD_PROJECT` | no | Project for Vertex AI; detected automatically on Cloud Run |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service account key as raw JSON (if not using ADC) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | no | Path to a key file (local dev) |
 | `PORT` | no | Default `8080` |
@@ -230,6 +239,28 @@ The viewer's **Platforms** table shows this per placement. For 9:16 assets, **Sh
 overlays the playbook's guides on the image: top and bottom 14% covered by app UI, text inside the
 center 80%, hero product inside the center 60%. The **Ready for** filter (under File details) lists
 assets usable for a placement, as they are or with a deliberate crop.
+
+## More like this and search by description
+
+The viewer's **More like this** shows assets that look similar; **See all** opens them as a
+grid (`?like=<id>`). Without Vertex AI it ranks by shared tags, the same shoot folder, a nearby
+date and the same shape. With Vertex AI it compares the photos themselves, and the search box
+also finds photos by description ("snowy ride", "red bag on a tailgate"), shown after the name
+and tag matches under **Looks like "…"**.
+
+To turn on Vertex AI (Google's multimodal embeddings; about $0.0001 per image, once):
+
+```bash
+gcloud services enable aiplatform.googleapis.com
+gcloud projects add-iam-policy-binding rux-dam \
+  --member=serviceAccount:rux-dam@rux-dam.iam.gserviceaccount.com --role=roles/aiplatform.user
+gcloud run services update rux-dam --region us-west2 --update-env-vars VERTEX_EMBEDDINGS=on
+```
+
+After each sync, new assets are fingerprinted in the background from a 512px preview and the
+results are saved as `embeddings.json` in `DATA_BUCKET`, so it happens only once per file.
+Progress is in `/api/status` under `similarity` (`indexed`, `total`, `pending`, and
+`lastError` if requests fail).
 
 ## Finding files by date, format and size
 

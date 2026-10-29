@@ -182,21 +182,34 @@ class Library extends EventEmitter {
   }
 
   // Every folder with its parent and how many assets it contains (recursively).
+  // Every folder with what a folder card needs: asset counts (recursive), the
+  // date range of what's inside, and up to 3 recent photos for its cover.
   folderList() {
-    const counts = new Map();
+    const stats = new Map();
     for (const a of this.assets) {
-      for (const f of a.ancestors) counts.set(f.id, (counts.get(f.id) || 0) + 1);
+      const date = assetDate(a).slice(0, 10);
+      for (const f of a.ancestors) {
+        const s = stats.get(f.id) || { count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] };
+        s.count++;
+        s[a.kind === 'video' ? 'videos' : 'photos']++;
+        if (date && (!s.from || date < s.from)) s.from = date;
+        if (date && date > s.to) s.to = date;
+        if (a.hasThumbnail && s.covers.length < 3) s.covers.push(a.id);
+        stats.set(f.id, s);
+      }
     }
+    const empty = { count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] };
     return [...this.folders.values()].map((f) => ({
       id: f.id,
       name: f.name,
       path: f.path,
       parentId: f.ancestors.length ? f.ancestors[f.ancestors.length - 1].id : null,
       ancestors: f.ancestors,
-      count: counts.get(f.id) || 0,
+      ...(stats.get(f.id) || empty),
       tags: this.tags.own(f.id),
       label: this.tags.label(f.id),
       rights: this.rights.get(f.id),
+      restricted: this.rights.resolve(f).status === 'restricted',
       suggestions: this.suggestions.resolve(f.id, this.tags.resolve(f)),
     }));
   }
@@ -286,11 +299,23 @@ class Library extends EventEmitter {
         matches.splice(0, matches.length, ...text, ...visual);
       }
     }
+    // Per-month counts for date headings and jump-to-date, by the sort's date.
+    const dateOf = { modified: (v) => v.modifiedTime, added: (v) => v.createdTime, taken: assetDate, 'taken-asc': assetDate }[sort || 'modified'];
+    let months = null;
+    if (dateOf && rankMode !== 'only') {
+      months = {};
+      for (const v of matches) {
+        if (v.match) continue;
+        const key = (dateOf(v) || '').slice(0, 7) || 'undated';
+        months[key] = (months[key] || 0) + 1;
+      }
+    }
     return {
       total: matches.length,
       items: matches.slice(offset, offset + limit),
       facets,
       fileFacets: fileCounts,
+      months,
     };
   }
 

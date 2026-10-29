@@ -91,13 +91,24 @@
         <div id="folder-ai" class="folder-ai"></div>
         <button id="folder-suggest" class="btn ghost ai-btn" type="button" hidden></button>
       </section>
+      <section id="folder-cards" class="folder-cards" aria-label="Folders" hidden></section>
       <div class="toolbar">
         <p id="meta" class="meta"></p>
-        <button id="select-all" class="link" type="button">Select all loaded</button>
-        <button id="copy-view" class="link" type="button">Copy link to this view</button>
+        <div id="chips" class="chips-bar"></div>
+        <div class="toolbar-end">
+          <button id="select-all" class="link" type="button">Select all loaded</button>
+          <button id="copy-view" class="link" type="button">Copy link to this view</button>
+          <label class="size-control" title="Thumbnail size">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"></rect><rect x="13" y="4" width="7" height="7" rx="1"></rect><rect x="4" y="13" width="7" height="7" rx="1"></rect><rect x="13" y="13" width="7" height="7" rx="1"></rect></svg>
+            <input id="size" type="range" min="120" max="360" step="10" aria-label="Thumbnail size">
+          </label>
+        </div>
       </div>
       <div id="ai-status" class="ai-status" hidden></div>
-      <div id="grid" class="grid"></div>
+      <div class="grid-wrap">
+        <div id="grid" class="grid"></div>
+        <nav id="scrubber" class="scrubber" aria-label="Jump to date" hidden></nav>
+      </div>
       <div id="sentinel"></div>
     </main>
   </div>
@@ -114,7 +125,25 @@
 
   <dialog id="viewer">
     <div class="viewer">
-      <div id="stage" class="stage"></div>
+      <div class="stage-col">
+        <div id="stage" class="stage"></div>
+        <button id="v-prev" class="nav-btn prev" type="button" aria-label="Previous (←)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+        </button>
+        <button id="v-next" class="nav-btn next" type="button" aria-label="Next (→)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+        </button>
+        <div class="stage-bar">
+          <span id="v-pos" class="v-pos"></span>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button id="z-fit" type="button">Fit</button>
+            <button id="z-100" type="button">100%</button>
+            <button id="z-200" type="button">200%</button>
+          </div>
+          <span class="keys">← → browse · Z zoom · Esc close</span>
+        </div>
+        <div id="filmstrip" class="filmstrip" aria-label="Nearby assets"></div>
+      </div>
       <aside class="details">
         <button id="close" class="close" type="button" aria-label="Close">×</button>
         <h2 id="d-name"></h2>
@@ -125,6 +154,16 @@
           <a id="d-drive" class="btn ghost" target="_blank" rel="noopener">Open in Drive</a>
           <button id="d-copy" class="btn ghost" type="button">Copy link to this asset</button>
         </div>
+
+        <section class="panel">
+          <div class="panel-head"><h3>More from this shoot</h3><button id="d-shoot-all" class="link" type="button">See all</button></div>
+          <div id="d-shoot" class="mini-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3 id="d-like-title">More like this</h3><button id="d-like-all" class="link" type="button">See all</button></div>
+          <div id="d-like" class="mini-grid"></div>
+        </section>
 
         <section class="panel">
           <h3>Platforms</h3>
