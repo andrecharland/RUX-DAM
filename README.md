@@ -235,10 +235,9 @@ Playbook: Reels and Stories (9:16, 1080×1920), Feed 4:5 (1080×1350), Feed 1:1 
   deliberate crops rather than relying on auto-cropping), with the crop size;
 - **Too small**: not enough pixels either way.
 
-The viewer's **Platforms** table shows this per placement. For 9:16 assets, **Show 9:16 safe zones**
-overlays the playbook's guides on the image: top and bottom 14% covered by app UI, text inside the
-center 80%, hero product inside the center 60%. The **Ready for** filter (under File details) lists
-assets usable for a placement, as they are or with a deliberate crop.
+The **Ready for** filter (under File details) lists assets usable for a placement, as they are or
+with a deliberate crop. (The viewer's per-placement table and 9:16 safe-zone overlay were removed
+for now; they may come back with an export or crop feature.)
 
 ## More like this and search by description
 

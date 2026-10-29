@@ -418,21 +418,4 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 }
 .label-row .drive-name { color: var(--muted); font-size: 12px; width: 100%; word-break: break-word; }
 
-/* Platform readiness */
-.specs { width: 100%; border-collapse: collapse; font-size: 13px; }
-.specs td { padding: 5px 4px; border-top: 1px solid var(--line); vertical-align: top; }
-.specs td:last-child { color: var(--muted); }
-.spec { display: inline-block; white-space: nowrap; font-weight: 600; font-size: 12px; padding: 1px 8px; border-radius: 999px; }
-.spec.ready { background: #e6f4ea; color: #1f6f3f; }
-.spec.crop { background: #fff1d6; color: #7a4800; }
-.spec.small { background: #fde8e6; color: #b42318; }
-.zones-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-bottom: 8px; }
-.zones { position: absolute; pointer-events: none; }
-.zones .band { position: absolute; left: 0; right: 0; height: 14%; background: rgba(180, 35, 24, .45); color: #fff;
-  font-size: 11px; display: grid; place-items: center; }
-.zones .band.top { top: 0; }
-.zones .band.bottom { bottom: 0; }
-.zones .text-area { position: absolute; left: 10%; right: 10%; top: 14%; bottom: 14%; border: 1.5px dashed #fff; }
-.zones .hero-area { position: absolute; left: 20%; right: 20%; top: 20%; bottom: 20%; border: 1.5px dotted #ffd28a;
-  color: #ffd28a; font-size: 11px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; }
 .group { scroll-margin-top: 63px; }

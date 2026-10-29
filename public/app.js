@@ -746,7 +746,6 @@ async function afterEdit() {
     const fresh = await api(`/api/assets/${state.current.id}`);
     state.current = fresh;
     renderViewerLabel(fresh);
-    renderSpecs(fresh);
     renderSuggestions(fresh);
     renderViewerTags(fresh);
     renderRights(fresh);
@@ -1061,53 +1060,6 @@ function renderViewerLabel(asset) {
   }), { showTitle: false }));
 }
 
-// ---------- platform readiness ----------
-
-const SPEC_LOOK = { ready: '✓ Ready', crop: 'Crop needed', small: '✕ Too small' };
-state.zones = false;
-
-// How the asset fits each placement in the playbook, plus the 9:16 safe-zone
-// overlay for vertical assets.
-function renderSpecs(asset) {
-  const box = $('d-specs');
-  if (!asset.width || !asset.height) {
-    box.replaceChildren(el('p', { class: 'empty-note', text: 'Drive has no pixel size for this file yet.' }));
-    return;
-  }
-  const vertical = RuxSpecs.isVertical(asset.width, asset.height);
-  box.replaceChildren(
-    vertical ? el('label', { class: 'zones-toggle' }, [
-      el('input', { type: 'checkbox', checked: state.zones, onchange: (e) => { state.zones = e.target.checked; placeZones(); } }),
-      el('span', { text: 'Show 9:16 safe zones: top and bottom 14% clear, text in the center 80%, hero product in the center 60%' }),
-    ]) : '',
-    el('table', { class: 'specs' }, [el('tbody', {}, RuxSpecs.PLACEMENTS.map((p) => {
-      const r = RuxSpecs.check(asset.width, asset.height, p);
-      return el('tr', {}, [
-        el('td', { text: p.name }),
-        el('td', {}, [el('span', { class: `spec ${r.status}`, text: SPEC_LOOK[r.status] })]),
-        el('td', { text: r.detail }),
-      ]);
-    }))]),
-  );
-  placeZones();
-}
-
-// Lays the safe-zone overlay exactly over the displayed photo or video.
-function placeZones() {
-  const zones = $('zones');
-  const media = $('stage').firstElementChild;
-  const asset = state.current;
-  if (!zones || !media || !asset) return;
-  zones.hidden = !(state.zones && !state.zoom && RuxSpecs.isVertical(asset.width, asset.height));
-  if (zones.hidden) return;
-  const stage = $('stage').getBoundingClientRect();
-  const box = media.getBoundingClientRect();
-  Object.assign(zones.style, {
-    left: `${box.left - stage.left}px`, top: `${box.top - stage.top}px`, width: `${box.width}px`, height: `${box.height}px`,
-  });
-}
-window.addEventListener('resize', placeZones);
-
 // ---------- viewer ----------
 
 // The add row stays open from photo to photo once opened, for tagging a run of them.
@@ -1190,14 +1142,7 @@ function open(asset) {
   const media = asset.kind === 'video'
     ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview })
     : image;
-  media.addEventListener(asset.kind === 'video' ? 'loadedmetadata' : 'load', placeZones);
-  $('stage').replaceChildren(media, el('div', { class: 'zones', id: 'zones', hidden: true }, [
-    el('div', { class: 'band top', text: 'Covered by app UI' }),
-    el('div', { class: 'text-area' }),
-    el('div', { class: 'hero-area', text: 'Hero product' }),
-    el('div', { class: 'band bottom', text: 'Covered by app UI' }),
-  ]));
-  renderSpecs(asset);
+  $('stage').replaceChildren(media);
   renderViewerLabel(asset);
   const rows = [
     ['Format', `${asset.format || ''} (${asset.mimeType})`.replace(/^ \(/, '(')],
@@ -1280,7 +1225,6 @@ function setZoom(level) {
       stage.scrollTop = (img.naturalHeight * level - box.height) / 2;
     }
   }
-  placeZones();
 }
 
 const relatedThumbs = (list) => (list.length
