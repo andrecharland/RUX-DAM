@@ -60,3 +60,22 @@ test("Drive's rate-limit errors are retried", async (t) => {
   assert.strictEqual(await drive.thumbnailLink('a'), 'https://lh3.test/a=s220');
   assert.strictEqual(n, 2);
 });
+
+test('design files are kept as their own kind; other documents are left out', () => {
+  const { kindOf, toAsset } = require('../src/drive');
+  assert.strictEqual(kindOf({ mimeType: 'application/illustrator', name: 'RUX Merino Shirt.ai' }), 'design');
+  assert.strictEqual(kindOf({ mimeType: 'application/postscript', name: 'logo.eps' }), 'design');
+  assert.strictEqual(kindOf({ mimeType: 'image/vnd.adobe.photoshop', name: 'hero.psd' }), 'design');
+  assert.strictEqual(kindOf({ mimeType: 'application/octet-stream', fileExtension: 'PSB', name: 'big.psb' }), 'design');
+  assert.strictEqual(kindOf({ mimeType: 'application/octet-stream', name: 'layout.indd' }), 'design');
+  assert.strictEqual(kindOf({ mimeType: 'image/jpeg', name: 'a.jpg' }), 'image');
+  assert.strictEqual(kindOf({ mimeType: 'video/mp4', name: 'a.mp4' }), 'video');
+  assert.strictEqual(kindOf({ mimeType: 'application/vnd.google-apps.document', name: 'Notes' }), null);
+  assert.strictEqual(kindOf({ mimeType: 'application/pdf', name: 'release.pdf' }), null);
+  assert.strictEqual(kindOf({ mimeType: 'application/octet-stream', name: 'DSC_0726.R3D' }), null);
+  const asset = toAsset({ id: 'x', name: 'logo.ai', mimeType: 'application/illustrator', thumbnailLink: 'l' }, '', 'Root');
+  assert.strictEqual(asset.kind, 'design');
+  const { formatOf } = require('../src/fileinfo');
+  assert.strictEqual(formatOf(asset), 'AI');
+  assert.strictEqual(formatOf({ ...asset, mimeType: 'application/postscript', name: 'logo.eps' }), 'EPS');
+});

@@ -199,13 +199,13 @@ class Library extends EventEmitter {
   // `direct` is the same for only the files directly in the folder, plus their
   // median date, so shoots can be ordered by when they happened.
   folderList() {
-    const blank = () => ({ count: 0, photos: 0, videos: 0, from: '', to: '', covers: [] });
+    const blank = () => ({ count: 0, photos: 0, videos: 0, designs: 0, from: '', to: '', covers: [] });
     const stats = new Map();
     const direct = new Map();
     const add = (map, id, a, date) => {
       const s = map.get(id) || blank();
       s.count++;
-      s[a.kind === 'video' ? 'videos' : 'photos']++;
+      s[{ video: 'videos', design: 'designs' }[a.kind] || 'photos']++;
       if (date && (!s.from || date < s.from)) s.from = date;
       if (date && date > s.to) s.to = date;
       if (a.hasThumbnail && s.covers.length < 3) s.covers.push({ id: a.id, modifiedTime: a.modifiedTime });

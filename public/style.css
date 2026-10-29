@@ -680,3 +680,13 @@ dialog.ask { width: min(440px, 100vw - 32px); }
 @media (hover: none) { .like-btn { opacity: 1; } }
 /* The map takes the space the folder and collection cards would. */
 body.map-mode #folder-cards, body.map-mode #collection-cards { display: none; }
+
+/* Design files (logos, artwork): shown whole on a checkerboard, so white or
+   transparent artwork stays visible. */
+.card.design, #stage img.design {
+  background-color: #e4e4e0;
+  background-image: conic-gradient(#d2d2cd 25%, transparent 0 50%, #d2d2cd 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+.card.design img { object-fit: contain; padding: 8px; }
+.card.design .noprev { font-size: 20px; font-weight: 700; letter-spacing: .04em; color: #6b6b73; }

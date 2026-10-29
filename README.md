@@ -315,6 +315,16 @@ clicking one finds others with that color. After each sync the server works out 
 colors per photo from its 256px preview (a couple at a time, which also fills the preview
 cache) and saves them in `colors.json`. Photos whose preview isn't a JPEG get none.
 
+## Design files
+
+Illustrator (`.ai`), EPS, Photoshop (`.psd`, `.psb`) and InDesign (`.indd`, `.idml`) files in
+the folders are listed too, as **Design files** under Filter & sort. Tiles and the viewer use
+Google Drive's preview, shown whole on a checkerboard so white or transparent logos stay
+visible. Drive previews most AI, EPS and PSD files (not InDesign, and not PSDs saved without
+"Maximize compatibility"); without one the viewer opens Drive's own viewer, which works for
+people who can open the file in Drive. PDFs are left out, since in shoot folders they're
+mostly releases and invoices.
+
 ## Finding files by date, format and size
 
 The **File details** filters in the sidebar come from Google Drive's file information:

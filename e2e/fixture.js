@@ -85,11 +85,11 @@ function fakeDrive(files, { failThumbnails = new Set() } = {}) {
     hasVideo: Boolean(video),
     crawl: async () => ({
       assets: files.map((f) => toAsset({
-        id: f.id, name: f.name, mimeType: f.kind === 'video' ? 'video/mp4' : 'image/jpeg', thumbnailLink: 'x',
+        id: f.id, name: f.name, mimeType: f.mime || (f.kind === 'video' ? 'video/mp4' : 'image/jpeg'), thumbnailLink: f.noThumb ? undefined : 'x',
         modifiedTime: `${f.date}T10:00:00Z`, createdTime: `${f.date}T10:00:00Z`, size: '5000000',
         ...(f.kind === 'video'
           ? { videoMediaMetadata: { width: f.w, height: f.h, durationMillis: '3000' } }
-          : { imageMediaMetadata: { width: f.w, height: f.h, time: `${f.date.replace(/-/g, ':')} 10:00:00` } }),
+          : f.kind === 'design' ? {} : { imageMediaMetadata: { width: f.w, height: f.h, time: `${f.date.replace(/-/g, ':')} 10:00:00` } }),
       }, ancestorsOf(f.shoot).slice(1).map((a) => a.name).join('/'), ROOT.name, ancestorsOf(f.shoot))),
       folders: [
         { id: ROOT.id, name: ROOT.name, path: '', ancestors: [] },
@@ -138,8 +138,13 @@ const fakeClaude = {
 };
 
 // Starts the app on a free port. `user` simulates a signed-in Google account.
-async function startApp({ user = null, failThumbnails } = {}) {
+async function startApp({ user = null, failThumbnails, designs = false } = {}) {
   const files = makeFiles();
+  // A logo from Illustrator (Drive previews it) and an InDesign file (it doesn't).
+  if (designs) {
+    files.push({ id: 'dAi', name: 'RUX logo.ai', mime: 'application/illustrator', shoot: SHOOTS[1], w: 800, h: 400, color: '#ffffff', date: '2026-09-05', kind: 'design' });
+    files.push({ id: 'dIndd', name: 'Lookbook.indd', mime: 'application/x-indesign', shoot: SHOOTS[1], w: 1, h: 1, color: '#000', date: '2026-09-06', kind: 'design', noThumb: true });
+  }
   const drive = fakeDrive(files, { failThumbnails });
   const library = new Library(drive, [ROOT.id], {
     tags: new TagStore({ log: quiet }), curation: new CurationStore({ log: quiet }),

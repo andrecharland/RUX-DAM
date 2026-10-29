@@ -37,7 +37,7 @@ export function renderChips() {
     add('Color', colorName(state.color), () => { state.color = ''; renderSwatches(); });
     chips.at(-1).querySelector('.v').prepend(el('span', { class: 'chip-swatch', style: `background: ${state.color}` }));
   }
-  if (state.kind) add('Type', state.kind === 'video' ? 'Videos' : 'Images', () => { state.kind = ''; $('kind').value = ''; });
+  if (state.kind) add('Type', { video: 'Videos', design: 'Design files' }[state.kind] || 'Images', () => { state.kind = ''; $('kind').value = ''; });
   if (state.rights) add('Rights', state.rights === 'cleared' ? 'Cleared to use' : 'Do not use', () => { state.rights = ''; $('rights').value = ''; });
   if (state.suggested) add('Claude', 'Suggestions to review', () => { state.suggested = ''; $('suggested').value = ''; });
   if (state.rating) add('Rating', `${'★'.repeat(state.rating)}${state.rating < 5 ? ' and up' : ''}`, () => { state.rating = ''; $('rating').value = ''; });

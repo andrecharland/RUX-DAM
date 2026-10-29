@@ -23,20 +23,21 @@ export function card(asset) {
   const creator = creatorOf(asset);
   const where = [asset.collection, asset.path].filter(Boolean).join(' / ');
   return el('div', {
-    class: ['card', restricted && 'restricted', selected && 'selected'].filter(Boolean).join(' '),
+    class: ['card', restricted && 'restricted', selected && 'selected', asset.kind === 'design' && 'design'].filter(Boolean).join(' '),
     tabindex: 0, role: 'button', 'data-id': asset.id, 'aria-label': displayName(asset), draggable: canReorder() ? 'true' : false,
     style: `--ar: ${ar.toFixed(3)}${asset.color ? `; background-color: ${asset.color}` : ''}`,
   }, [
     el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected, tabindex: -1 }),
     asset.hasThumbnail
       ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '', onload: (e) => sampleColor(asset, e.target) })
-      : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
+      : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : asset.kind === 'design' ? asset.format : 'No preview' }),
     restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
     asset.hasThumbnail ? el('button', {
       type: 'button', class: 'like-btn', text: 'Similar', tabindex: -1, title: 'More like this (S)',
       'aria-label': `More like ${displayName(asset)}`,
     }) : '',
     asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',
+    asset.kind === 'design' && asset.hasThumbnail ? el('span', { class: 'badge', text: asset.format }) : '',
     asset.suggestions?.count ? el('span', { class: 'ai-dot', text: `✨ ${asset.suggestions.count}`, title: 'Suggestions from Claude to review' }) : '',
     el('button', {
       type: 'button', class: `heart${asset.favorite ? ' on' : ''}`, text: '♥', 'aria-pressed': String(Boolean(asset.favorite)), tabindex: -1,

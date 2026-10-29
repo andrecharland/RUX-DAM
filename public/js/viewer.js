@@ -134,6 +134,34 @@ export function showVideo(asset, mode) {
   $('v-note').textContent = '';
 }
 
+// Design files (AI, EPS, PSD…) show Drive's preview image, which zooms
+// like a photo. Without one, or if it fails, Drive's own viewer shows the file
+// (every artboard), for people who can open it in Drive.
+export function showDesign(asset, preview) {
+  const drive = () => {
+    if (state.current?.id !== asset.id) return;
+    $('stage').replaceChildren(el('iframe', {
+      class: 'drive-player', src: `https://drive.google.com/file/d/${encodeURIComponent(asset.id)}/preview`,
+      allowfullscreen: true, title: `${displayName(asset)} in Google Drive's viewer`,
+    }));
+    $('v-note').textContent = 'Google Drive’s viewer. Shows “You need access” if your account can’t open this file in Drive.';
+    setZoom(0);
+  };
+  if (!preview) return drive();
+  const image = el('img', { src: tileUrl(asset), alt: asset.name, class: 'soft design' });
+  const sharp = new Image();
+  sharp.onload = () => {
+    if (state.current?.id !== asset.id) return;
+    image.src = preview;
+    image.classList.remove('soft');
+  };
+  sharp.onerror = drive;
+  image.addEventListener('error', drive);
+  sharp.src = preview;
+  $('stage').replaceChildren(image);
+  $('v-note').textContent = `${asset.format} preview from Google Drive. Download or open in Drive for the full file.`;
+}
+
 // Shows the grid's preview (already loaded) straight away, then the sharp one;
 // the original file if there's no preview or it fails.
 export function photoElement(asset, preview, fileUrl) {
@@ -163,6 +191,7 @@ export function open(asset) {
   $('v-player').hidden = asset.kind !== 'video';
   $('v-note').textContent = '';
   if (asset.kind === 'video') showVideo(asset, 'direct');
+  else if (asset.kind === 'design') showDesign(asset, preview);
   else $('stage').replaceChildren(photoElement(asset, preview, fileUrl));
   prefetchNeighbors(asset);
   renderViewerLabel(asset);

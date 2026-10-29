@@ -9,7 +9,8 @@ const RAW = new Set(['cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'dng', 'ra
 const FORMAT_BY_MIME = {
   'image/jpeg': 'JPG', 'image/png': 'PNG', 'image/gif': 'GIF', 'image/webp': 'WebP', 'image/heic': 'HEIC',
   'image/heif': 'HEIC', 'image/tiff': 'TIFF', 'image/svg+xml': 'SVG', 'image/bmp': 'BMP',
-  'image/vnd.adobe.photoshop': 'PSD', 'video/mp4': 'MP4', 'video/quicktime': 'MOV', 'video/webm': 'WebM',
+  'image/vnd.adobe.photoshop': 'PSD', 'application/illustrator': 'AI', 'application/vnd.adobe.illustrator': 'AI',
+  'application/x-indesign': 'INDD', 'video/mp4': 'MP4', 'video/quicktime': 'MOV', 'video/webm': 'WebM',
   'video/x-msvideo': 'AVI', 'video/x-m4v': 'M4V', 'video/mpeg': 'MPEG',
 };
 
@@ -69,7 +70,7 @@ function fileFacets(asset) {
   if (asset.size) out.size = bucket(asset.size, SIZE_BUCKETS);
   const orientation = orientationOf(asset);
   if (orientation) out.orientation = orientation;
-  if (asset.kind === 'image' && asset.width && asset.height) {
+  if (asset.kind !== 'video' && asset.width && asset.height) {
     out.resolution = bucket(asset.width * asset.height, RESOLUTION_BUCKETS);
   }
   if (asset.kind === 'video' && asset.durationMs) out.duration = bucket(asset.durationMs, DURATION_BUCKETS);

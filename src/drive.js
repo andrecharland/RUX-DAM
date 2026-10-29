@@ -12,9 +12,26 @@ const FIELDS = 'nextPageToken,files(id,name,mimeType,fileExtension,size,createdT
   'thumbnailLink,imageMediaMetadata(width,height,rotation,time,cameraMake,cameraModel),' +
   'videoMediaMetadata(width,height,durationMillis),webViewLink,parents)';
 
-function isMedia(mimeType) {
-  return mimeType.startsWith('image/') || mimeType.startsWith('video/');
+// Design files (Adobe formats). Drive makes previews for most of them (not
+// InDesign); some come through typed only by their extension. PDFs are left
+// out: in shoot folders they're usually releases, invoices and notes.
+const DESIGN_TYPES = new Set([
+  'image/vnd.adobe.photoshop', 'image/x-photoshop', 'application/illustrator', 'application/vnd.adobe.illustrator',
+  'application/postscript', 'application/eps', 'application/x-eps', 'image/x-eps',
+  'application/x-indesign', 'application/vnd.adobe.indesign-idml-package',
+]);
+const DESIGN_EXTENSIONS = new Set(['psd', 'psb', 'ai', 'eps', 'indd', 'idml']);
+
+// 'image', 'video' or 'design', or null for files the DAM leaves out.
+function kindOf({ mimeType = '', fileExtension, name = '' }) {
+  const ext = (fileExtension || name.split('.').pop() || '').toLowerCase();
+  if (DESIGN_TYPES.has(mimeType) || DESIGN_EXTENSIONS.has(ext)) return 'design';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('image/')) return 'image';
+  return null;
 }
+
+const isMedia = (mimeType) => Boolean(kindOf({ mimeType }));
 
 // macOS "AppleDouble" files (`._name.jpg`) are Finder metadata copied alongside
 // real files, not images, even though Drive types them by their extension.
@@ -35,7 +52,7 @@ function toAsset(file, folderPath, rootName, ancestors = []) {
     id: file.id,
     name: file.name,
     mimeType: file.mimeType,
-    kind: file.mimeType.startsWith('video/') ? 'video' : 'image',
+    kind: kindOf(file) || 'image',
     fileExtension: (file.fileExtension || '').toLowerCase() || undefined,
     size: file.size ? Number(file.size) : null,
     width: (turned ? meta.height : meta.width) || null,
@@ -124,7 +141,7 @@ class DriveClient {
             path: childPath,
             ancestors: [...ancestors, { id: file.id, name: file.name }],
           });
-        } else if (isMedia(file.mimeType) && !isJunk(file.name)) {
+        } else if (kindOf(file) && !isJunk(file.name)) {
           assets.push(toAsset(file, path, root.name, ancestors));
           if (file.thumbnailLink) this.links.set(file.id, { url: file.thumbnailLink, at: Date.now() });
         }
@@ -193,4 +210,4 @@ class DriveClient {
   }
 }
 
-module.exports = { DriveClient, isMedia, toAsset };
+module.exports = { DriveClient, isMedia, kindOf, toAsset };

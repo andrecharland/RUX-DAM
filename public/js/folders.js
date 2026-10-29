@@ -224,7 +224,7 @@ export function dateSpan(from, to) {
 export function folderCard(f, { where } = {}) {
   const covers = [0, 1, 2].map((i) => el('div', {}, f.covers?.[i]
     ? [el('img', { src: thumbUrl(f.covers[i], (i ? 120 : 260) * DPR), alt: '', loading: 'lazy', decoding: 'async' })] : []));
-  const meta = [dateSpan(f.from, f.to), f.photos ? plural(f.photos, 'photo') : '', f.videos ? plural(f.videos, 'video') : '']
+  const meta = [dateSpan(f.from, f.to), f.photos ? plural(f.photos, 'photo') : '', f.videos ? plural(f.videos, 'video') : '', f.designs ? plural(f.designs, 'design file') : '']
     .filter(Boolean).join(' · ');
   const tagValues = Object.values(f.tags || {}).flat().slice(0, 3);
   return el('button', { type: 'button', class: 'fcard', title: f.path || f.name, onclick: () => selectFolder(f.id) }, [
