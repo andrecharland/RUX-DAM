@@ -403,7 +403,7 @@ if (require.main === module) {
       console.warn('SESSION_SECRET is not set: everyone is signed out whenever the service restarts.');
     }
     signIn = googleSignIn({
-      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientId: process.env.GOOGLE_CLIENT_ID.trim(),
       clientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim(),
       sessionSecret,
       allowedDomains: list(process.env.ALLOWED_DOMAINS),
