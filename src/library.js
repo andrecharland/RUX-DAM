@@ -5,6 +5,7 @@ const { TagStore } = require('./tags');
 const { SuggestionStore } = require('./suggest');
 const { fileFacets, assetDate, formatOf, SORTS } = require('./fileinfo');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 
 function hashIndex(assets, folders) {
   return crypto.createHash('sha1').update(JSON.stringify([assets, folders])).digest('hex');
@@ -30,7 +31,7 @@ function parseTagFilters(list = []) {
 // asset list, and a restart shows that saved list right away while a fresh
 // sync runs in the background. Metadata (tags, rights, suggestions) is kept
 // separately, keyed by Drive file ID, and a sync never changes it.
-class Library {
+class Library extends EventEmitter {
   constructor(drive, folderIds, {
     refreshMs = 10 * 60 * 1000,
     rights = new RightsStore(),
@@ -39,6 +40,7 @@ class Library {
     index = null,
     log = console,
   } = {}) {
+    super();
     this.drive = drive;
     this.folderIds = folderIds;
     this.refreshMs = refreshMs;
@@ -155,6 +157,7 @@ class Library {
           this.log.error(`Failed to save the index: ${err.message}`);
         }
       }
+      this.emit('synced');
     })().finally(() => { this.syncing = null; });
     return this.syncing;
   }
@@ -205,9 +208,15 @@ class Library {
   // filter the same way (`file: ['format:JPG', 'year:2025']`), plus a date range
   // (`from`/`to`, YYYY-MM-DD, on the date taken, else the date added). Also
   // returns value counts per field across the matches, for the filter sidebar.
+  //
+  // `rank` (Map id -> score) adds similarity: with rankMode 'only' results are
+  // limited to ranked assets, best match first unless another sort is chosen
+  // ("looks like this"); with 'append', assets the search text doesn't match
+  // but that rank highly are added after the text matches, marked
+  // `match: 'visual'` (search by description).
   search({
     q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', file = [],
-    from = '', to = '', sort = 'modified', offset = 0, limit = 100,
+    from = '', to = '', sort = 'modified', offset = 0, limit = 100, rank = null, rankMode = '',
   } = {}) {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const tagFilters = parseTagFilters(tags);
@@ -216,6 +225,7 @@ class Library {
     const facets = {};
     const fileCounts = {};
     for (const a of this.assets) {
+      if (rankMode === 'only' && !rank?.has(a.id)) continue;
       if (kind && a.kind !== kind) continue;
       if (folder && !a.ancestors.some((f) => f.id === folder)) continue;
       const day = assetDate(a).slice(0, 10);
@@ -233,7 +243,10 @@ class Library {
           .filter(Boolean).map((l) => l.name).join(' ');
         const haystack = (`${a.name} ${a.collection} ${a.path} ${values} ${description} ${labels} ` +
           `${props.format} ${props.year || ''} ${props.camera || ''} ${props.orientation || ''}`).toLowerCase();
-        if (!terms.every((t) => haystack.includes(t))) continue;
+        if (!terms.every((t) => haystack.includes(t))) {
+          if (rankMode === 'append' && rank?.has(a.id)) view.match = 'visual';
+          else continue;
+        }
       }
 
       // Tag and file filter groups this asset fails. Each group's counts ignore
@@ -261,7 +274,18 @@ class Library {
       }
       if (!failed.length) matches.push(view);
     }
-    if (SORTS[sort]) matches.sort(SORTS[sort]);
+    const score = (v) => rank?.get(v.id) ?? 0;
+    if (rankMode === 'only' && (!sort || sort === 'modified')) {
+      matches.sort((x, y) => score(y) - score(x));
+    } else {
+      if (SORTS[sort]) matches.sort(SORTS[sort]);
+      if (rankMode === 'append') {
+        // Text matches first (in the chosen order), then visual matches, best first.
+        const text = matches.filter((v) => !v.match);
+        const visual = matches.filter((v) => v.match).sort((x, y) => score(y) - score(x));
+        matches.splice(0, matches.length, ...text, ...visual);
+      }
+    }
     return {
       total: matches.length,
       items: matches.slice(offset, offset + limit),

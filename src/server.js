@@ -13,6 +13,8 @@ const { Suggester, SuggestionStore, DEFAULT_MODEL } = require('./suggest');
 const { JsonStore } = require('./store');
 const { ORDER: FILE_FACET_ORDER } = require('./fileinfo');
 const { googleSignIn } = require('./auth');
+const { VertexEmbedder, EmbeddingIndex } = require('./embeddings');
+const { tagSimilar } = require('./similar');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -54,7 +56,7 @@ async function pipeDrive(driveRes, res, passHeaders) {
 
 // Access: Google sign-in (`signIn`, see auth.js) when configured, otherwise the
 // optional shared password.
-function createApp({ library, drive, password, suggester, signIn }) {
+function createApp({ library, drive, password, suggester, signIn, similarity }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -70,10 +72,34 @@ function createApp({ library, drive, password, suggester, signIn }) {
   app.get('/api/me', (req, res) => res.json(req.user || null));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
-  app.get('/api/assets', (req, res) => {
+  // Assets that look like `id`: by visual fingerprint when it has one,
+  // otherwise by shared tags, shoot and date.
+  const similarTo = (id, limit) => {
+    const visual = similarity?.similar(id, limit);
+    return visual ? { mode: 'visual', rank: visual } : { mode: 'tags', rank: tagSimilar(library, id, limit) };
+  };
+
+  app.get('/api/assets', async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    res.json({ fileOrder: FILE_FACET_ORDER, ...library.search({
+    const q = String(req.query.q || '');
+    let rank = null;
+    let rankMode = '';
+    let similarMode;
+    const like = String(req.query.like || '');
+    if (like && library.has(like)) {
+      ({ rank, mode: similarMode } = similarTo(like, 200));
+      rankMode = 'only';
+    } else if (similarity?.enabled && q.trim().length >= 3) {
+      // Search by description: add photos that look like the words.
+      try {
+        rank = await similarity.searchText(q, 60);
+        rankMode = 'append';
+      } catch (err) {
+        console.error(`Visual search failed: ${err.message}`);
+      }
+    }
+    res.json({ fileOrder: FILE_FACET_ORDER, similarMode, ...library.search({
       q: String(req.query.q || ''),
       kind: String(req.query.kind || ''),
       folder: String(req.query.folder || ''),
@@ -86,7 +112,17 @@ function createApp({ library, drive, password, suggester, signIn }) {
       sort: String(req.query.sort || 'modified'),
       offset,
       limit,
+      rank,
+      rankMode,
     }) });
+  });
+
+  // "More like this" for the viewer.
+  app.get('/api/similar/:id', (req, res) => {
+    if (!library.has(req.params.id)) return res.sendStatus(404);
+    const limit = Math.min(Number(req.query.limit) || 24, 100);
+    const { mode, rank } = similarTo(req.params.id, limit);
+    res.json({ mode, items: [...rank.keys()].map((id) => library.view(library.byId.get(id))) });
   });
 
   app.get('/api/assets/:id', (req, res) => {
@@ -149,7 +185,10 @@ function createApp({ library, drive, password, suggester, signIn }) {
       next(err);
     }
   });
-  app.get('/api/status', (req, res) => res.json(library.status()));
+  app.get('/api/status', (req, res) => res.json({
+    ...library.status(),
+    similarity: similarity ? similarity.status() : { mode: 'tags' },
+  }));
 
   // Set usage rights on an indexed file or folder. status: cleared | restricted | inherit
   app.post('/api/rights/:id', express.json(), async (req, res, next) => {
@@ -335,6 +374,22 @@ if (require.main === module) {
     concurrency: Number(process.env.SUGGEST_CONCURRENCY) || 4,
   });
   if (!suggester.enabled) console.warn('ANTHROPIC_API_KEY is not set: tag suggestions are off.');
+  // Visual similarity and search by description, from Vertex AI multimodal
+  // embeddings. Fingerprints are kept in the data bucket; new assets are
+  // fingerprinted after each sync.
+  const vertexOn = /^(1|true|on|yes)$/i.test(process.env.VERTEX_EMBEDDINGS || '');
+  const similarity = new EmbeddingIndex({
+    library,
+    drive,
+    auth,
+    bucket,
+    rpm: Number(process.env.VERTEX_RPM) || 100,
+    embedder: vertexOn ? new VertexEmbedder({
+      auth, project: process.env.GOOGLE_CLOUD_PROJECT, location: process.env.VERTEX_LOCATION || 'us-central1',
+    }) : null,
+  });
+  const fingerprintsLoaded = similarity.load().catch((err) => console.error(`Could not load fingerprints: ${err.message}`));
+  library.on('synced', () => fingerprintsLoaded.then(() => similarity.queueMissing()));
   // Each sync reloads the rights flags and tags too. Saves are conditional on the stored
   // object's generation, so a failed load can't cause an edit to overwrite them.
   // Once loaded, collect results of batches submitted before a restart and keep checking.
@@ -358,7 +413,7 @@ if (require.main === module) {
       console.warn('Google sign-in is on but ALLOWED_DOMAINS and ALLOWED_EMAILS are empty: nobody can sign in.');
     }
   }
-  const app = createApp({ library, drive, suggester, signIn, password: process.env.DAM_PASSWORD });
+  const app = createApp({ library, drive, suggester, signIn, similarity, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));
 }

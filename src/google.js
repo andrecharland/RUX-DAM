@@ -5,6 +5,8 @@ const { GoogleAuth } = require('google-auth-library');
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/devstorage.read_write',
+  // Vertex AI (visual similarity); only used when VERTEX_EMBEDDINGS is on.
+  'https://www.googleapis.com/auth/cloud-platform',
 ];
 
 // Credentials come from GOOGLE_SERVICE_ACCOUNT_JSON (raw JSON), or else Application
