@@ -146,6 +146,8 @@ async function startApp({ user = null, failThumbnails } = {}) {
     suggestions: new SuggestionStore({ log: quiet }), log: quiet,
   });
   await library.sync();
+  // Main colors: every third photo mostly blue, the rest mostly green.
+  files.forEach((f, i) => library.colors.addPalette(f.id, [[i % 3 ? '#4a7a3a' : '#2f62b8', 70], ['#151515', 30]]));
   const suggester = new Suggester({ library, drive, client: fakeClaude, log: quiet });
   // Fingerprints: each shoot looks alike; a text query with "snow" looks like shoot A.
   const pad = (v) => [...v, ...new Array(252).fill(0)];

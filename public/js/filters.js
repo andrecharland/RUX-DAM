@@ -1,5 +1,6 @@
 import { $, FACET_LIMIT, el, fieldLabel, state } from './core.js';
 import { load } from './grid.js';
+import { colorName, endTrail, renderSwatches } from './explore.js';
 
 // Search box, filter sidebar (tags and file details) and the active-filter chips.
 
@@ -9,7 +10,9 @@ export function rangeLabel() {
 }
 
 export function clearAllFilters() {
-  state.q = state.like = state.likeName = state.kind = state.rights = state.suggested = state.rating = '';
+  state.q = state.kind = state.rights = state.suggested = state.rating = state.color = '';
+  endTrail();
+  renderSwatches();
   state.range = state.from = state.to = '';
   state.tags.clear();
   state.file.clear();
@@ -29,7 +32,11 @@ export function renderChips() {
     el('button', { type: 'button', 'aria-label': `Remove ${key} ${value}`, text: '×', onclick: () => { remove(); load(true); } }),
   ]));
   if (state.q) add('Search', `“${state.q}”`, () => { state.q = ''; $('q').value = ''; });
-  if (state.like) add('Looks like', state.likeName || 'asset', () => { state.like = state.likeName = ''; });
+  if (state.like) add('Looks like', state.likeName || 'asset', endTrail);
+  if (state.color) {
+    add('Color', colorName(state.color), () => { state.color = ''; renderSwatches(); });
+    chips.at(-1).querySelector('.v').prepend(el('span', { class: 'chip-swatch', style: `background: ${state.color}` }));
+  }
   if (state.kind) add('Type', state.kind === 'video' ? 'Videos' : 'Images', () => { state.kind = ''; $('kind').value = ''; });
   if (state.rights) add('Rights', state.rights === 'cleared' ? 'Cleared to use' : 'Do not use', () => { state.rights = ''; $('rights').value = ''; });
   if (state.suggested) add('Claude', 'Suggestions to review', () => { state.suggested = ''; $('suggested').value = ''; });

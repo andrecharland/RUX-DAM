@@ -202,9 +202,7 @@ class EmbeddingIndex {
     return v ? this.rank(v, { limit, exclude: id }) : null;
   }
 
-  // Assets that look like a text description: up to `limit`, keeping only those
-  // scoring within reach of the best match so weak matches don't pad results.
-  async searchText(query, limit = 60, { relative = 0.75 } = {}) {
+  async textVector(query) {
     const key = query.trim().toLowerCase();
     let v = this.textCache.get(key);
     if (!v) {
@@ -212,7 +210,52 @@ class EmbeddingIndex {
       this.textCache.set(key, v);
       if (this.textCache.size > 200) this.textCache.delete(this.textCache.keys().next().value);
     }
-    const ranked = this.rank(v, { limit });
+    return v;
+  }
+
+  // "More like this" from a trail of assets (oldest first), each step back
+  // counting less, optionally steered by words: `more` pulls toward what they
+  // describe, `less` away. Image and word scores sit on different scales, so
+  // each is standardised across the library before they're combined.
+  // Returns Map(id -> score), best first, or null if no trail asset has a fingerprint.
+  async explore(trail, { more = [], less = [], limit = 1000 } = {}) {
+    const seed = new Float32Array(DIM);
+    let found = false;
+    trail.forEach((id, i) => {
+      const v = this.vectors.get(id);
+      if (!v) return;
+      const w = 0.6 ** (trail.length - 1 - i);
+      for (let d = 0; d < DIM; d++) seed[d] += v[d] * w;
+      found = true;
+    });
+    if (!found) return null;
+    const parts = [[normalize(seed), 1]];
+    for (const word of more) parts.push([await this.textVector(word), 0.8]);
+    for (const word of less) parts.push([await this.textVector(word), -0.6]);
+
+    const ids = [];
+    const rows = [];
+    for (const a of this.library.assets) {
+      const v = this.vectors.get(a.id);
+      if (!v || trail.includes(a.id)) continue;
+      ids.push(a.id);
+      rows.push(v);
+    }
+    const total = new Float32Array(ids.length);
+    for (const [vector, weight] of parts) {
+      const s = rows.map((v) => dot(vector, v));
+      const mean = s.reduce((x, y) => x + y, 0) / (s.length || 1);
+      const sd = Math.sqrt(s.reduce((x, y) => x + (y - mean) ** 2, 0) / (s.length || 1)) || 1;
+      for (let i = 0; i < s.length; i++) total[i] += (weight * (s[i] - mean)) / sd;
+    }
+    const order = ids.map((id, i) => [id, total[i]]).sort((x, y) => y[1] - x[1]);
+    return new Map(order.slice(0, limit));
+  }
+
+  // Assets that look like a text description: up to `limit`, keeping only those
+  // scoring within reach of the best match so weak matches don't pad results.
+  async searchText(query, limit = 60, { relative = 0.75 } = {}) {
+    const ranked = this.rank(await this.textVector(query), { limit });
     const top = ranked.values().next().value;
     if (!(top > 0)) return ranked;
     return new Map([...ranked].filter(([, score]) => score >= top * relative));

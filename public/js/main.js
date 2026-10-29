@@ -11,6 +11,8 @@ import { loadFields } from './tags.js';
 import { displayName } from './titles.js';
 import { readUrl, writeUrl } from './url.js';
 import { open, saveRights, setZoom, showVideo, step } from './viewer.js';
+import { exploreFrom, renderSwatches } from './explore.js';
+import { showMap } from './map.js';
 import './sidebar.js';
 import './touch.js';
 
@@ -23,6 +25,10 @@ grid.addEventListener('click', (e) => {
   if (e.target.classList.contains('heart')) {
     const asset = state.items.get(id);
     favorite([id], !asset.favorite);
+    return;
+  }
+  if (e.target.classList.contains('like-btn')) {
+    exploreFrom(state.items.get(id));
     return;
   }
   // While a selection is active, clicking anywhere on a card adds/removes it.
@@ -48,6 +54,8 @@ grid.addEventListener('keydown', (e) => {
   } else if (e.key === 'f' || e.key === 'F') {
     const asset = state.items.get(target.dataset.id);
     favorite([asset.id], !asset.favorite);
+  } else if (e.key === 's' || e.key === 'S') {
+    exploreFrom(state.items.get(target.dataset.id));
   }
 });
 
@@ -146,10 +154,21 @@ $('d-like-all').addEventListener('click', () => {
   const asset = state.current;
   if (!asset) return;
   viewer.close();
-  state.like = asset.id;
-  state.likeName = displayName(asset);
-  load(true);
+  if (state.view === 'map') {
+    state.view = '';
+    showMap(false);
+  }
+  exploreFrom(asset);
 });
+
+// Grid or visual map.
+for (const button of document.querySelectorAll('#view-switch button')) {
+  button.addEventListener('click', () => {
+    state.view = button.dataset.view;
+    showMap(state.view === 'map');
+    writeUrl();
+  });
+}
 
 // Thumbnail size (kept per browser).
 {
@@ -275,7 +294,7 @@ $('sync').addEventListener('click', async () => {
 
 // Starts loading the next page about two screens before the end.
 new IntersectionObserver((entries) => {
-  if (entries[0].isIntersecting && state.offset < state.total) load();
+  if (entries[0].isIntersecting && state.offset < state.total && state.view !== 'map') load();
 }, { rootMargin: '200% 0px' }).observe($('sentinel'));
 
 export async function showUser() {
@@ -290,13 +309,16 @@ export async function showUser() {
 (async () => {
   showUser();
   const assetId = readUrl();
+  renderSwatches();
   if (state.like) {
     api(`/api/assets/${encodeURIComponent(state.like)}`)
       .then((a) => { state.likeName = displayName(a); renderChips(); })
       .catch(() => {});
   }
   await Promise.all([loadFields(), loadFolders(), refreshAi(), loadCollections()]);
-  watchSync();
+  await watchSync();
+  if (state.view === 'map' && $('view-switch').hidden) state.view = '';
+  showMap(state.view === 'map');
   await load(true);
   if (assetId) {
     try {

@@ -16,6 +16,8 @@ const { JsonStore } = require('./store');
 const { googleSignIn } = require('./auth');
 const { VertexEmbedder, EmbeddingIndex } = require('./embeddings');
 const { ThumbCache } = require('./thumbcache');
+const { MapLayout } = require('./layout');
+const { PaletteFiller } = require('./palette');
 
 const list = (v) => (v || '').split(/[\s,]+/).filter(Boolean);
 
@@ -98,13 +100,18 @@ function start(env = process.env) {
   });
   const fingerprintsLoaded = similarity.load().catch((err) => console.error(`Could not load fingerprints: ${err.message}`));
   library.on('synced', () => fingerprintsLoaded.then(() => similarity.queueMissing()));
+  // Each photo's main colors, from its smallest preview, for browsing by color.
+  const thumbs = new ThumbCache({ auth, bucket });
+  const palettes = new PaletteFiller({ library, preview: (asset) => thumbs.preview(drive, asset, 256) });
+  library.on('synced', () => palettes.run());
   // Each sync reloads the rights flags and tags too. Saves are conditional on the stored
   // object's generation, so a failed load can't cause an edit to overwrite them.
   // Once loaded, collect results of batches submitted before a restart and keep checking.
   library.start().then(() => suggester.startPolling());
 
   const app = createApp({
-    library, drive, suggester, signIn, similarity, thumbs: new ThumbCache({ auth, bucket }), password: env.DAM_PASSWORD,
+    library, drive, suggester, signIn, similarity, thumbs, password: env.DAM_PASSWORD,
+    layout: new MapLayout({ similarity, auth, bucket }),
   });
   const port = Number(env.PORT) || 8080;
   return app.listen(port, () => console.log(`RUX DAM listening on :${port}`));

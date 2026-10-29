@@ -15,6 +15,7 @@ export const state = {
   fields: [], folders: new Map(), expanded: new Set(), facetsOpen: new Set(),
   like: '', likeName: '', similarMode: '', months: null, zoom: 0, showAllFolders: false,
   rating: '', fav: '', collection: '', collections: [], favCount: 0, treeFilter: '',
+  color: '', more: [], less: [], view: '',
 };
 
 

@@ -253,7 +253,7 @@ try { folderView = localStorage.getItem('rux-dam-folder-view') || 'date'; } catc
 
 export function renderFolderCards() {
   const box = $('folder-cards');
-  const filtering = state.q || state.like || state.kind || state.rights || state.suggested || state.range ||
+  const filtering = state.q || state.like || state.color || state.kind || state.rights || state.suggested || state.range ||
     state.tags.size || state.file.size || state.rating || state.fav || state.collection;
   const folders = [...state.folders.values()];
   // With a single indexed root folder (e.g. Photo/Video), start from its subfolders.

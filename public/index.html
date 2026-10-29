@@ -126,6 +126,10 @@
               <option value="5">★★★★★</option>
             </select>
           </div>
+          <div class="facet">
+            <h3>Color</h3>
+            <div id="swatches" class="swatches" role="group" aria-label="Color"></div>
+          </div>
           <div id="facets"></div>
           <div class="side-links">
             <button id="add-field" class="link" type="button">+ Add a field</button>
@@ -195,10 +199,15 @@
       <section id="collection-panel" class="folder-tags collection-panel" hidden></section>
       <section id="collection-cards" class="folder-cards" aria-label="Collections" hidden></section>
       <section id="folder-cards" class="folder-cards" aria-label="Folders" hidden></section>
+      <section id="explore" class="explore" aria-label="More like this" hidden></section>
       <div class="toolbar">
         <p id="meta" class="meta"></p>
         <div id="chips" class="chips-bar"></div>
         <div class="toolbar-end">
+          <div id="view-switch" class="view-switch" role="group" aria-label="View" hidden>
+            <button type="button" data-view="" aria-pressed="true">Grid</button>
+            <button type="button" data-view="map" aria-pressed="false" title="Every photo arranged by how it looks">Map</button>
+          </div>
           <button id="select-all" class="link" type="button">Select all loaded</button>
           <button id="copy-view" class="link" type="button">Copy link to this view</button>
           <label class="size-control" title="Thumbnail size">
@@ -211,6 +220,16 @@
       <div class="grid-wrap">
         <div id="grid" class="grid" tabindex="-1"></div>
         <nav id="scrubber" class="scrubber" aria-label="Jump to date" hidden></nav>
+      </div>
+      <div id="map-view" class="map-view" hidden>
+        <canvas id="map-canvas" tabindex="0" aria-label="Visual map of the photos: arrow keys move, + and − zoom, 0 fits, Enter opens the photo in the middle"></canvas>
+        <div class="map-controls" role="group" aria-label="Map zoom">
+          <button id="map-in" type="button" aria-label="Zoom in">+</button>
+          <button id="map-out" type="button" aria-label="Zoom out">−</button>
+          <button id="map-fit" type="button">Fit</button>
+        </div>
+        <div id="map-tip" class="map-tip" hidden></div>
+        <p id="map-status" class="map-status" role="status"></p>
       </div>
       <div id="sentinel"></div>
     </main>
@@ -258,6 +277,7 @@
         </div>
         <div id="d-in" class="in-collections"></div>
         <div id="d-label" class="label-row"></div>
+        <div id="d-palette" class="palette" role="group" aria-label="Main colors" hidden></div>
         <dl id="d-meta"></dl>
         <div class="actions">
           <a id="d-download" class="btn">Download</a>
@@ -303,7 +323,7 @@
         </section>
 
         <section class="panel">
-          <div class="panel-head"><h3 id="d-like-title">More like this</h3><button id="d-like-all" class="link" type="button">See all</button></div>
+          <div class="panel-head"><h3 id="d-like-title">More like this</h3><button id="d-like-all" class="link" type="button">Explore from here</button></div>
           <div id="d-like" class="mini-grid"></div>
         </section>
       </aside>
@@ -323,6 +343,7 @@
         <dt><kbd>?</kbd></dt><dd>Show these shortcuts</dd>
         <dt><kbd>Esc</kbd></dt><dd>Close the viewer, a menu or this list; clear the selection</dd>
         <dt><kbd>Shift</kbd> + click</dt><dd>Select a range of tiles</dd>
+        <dt><kbd>S</kbd></dt><dd>More like the focused tile</dd>
       </dl>
       <h3>In the viewer</h3>
       <dl class="keys-list">

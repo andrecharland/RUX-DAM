@@ -20,8 +20,11 @@ export function dateRange() {
 export function queryParams(extra = {}) {
   const params = new URLSearchParams({
     q: state.q, kind: state.kind, rights: state.rights, folder: state.folder, suggested: state.suggested,
-    sort: state.sort, like: state.like, rating: state.rating, fav: state.fav, collection: state.collection, ...dateRange(),
+    sort: state.sort, like: state.like, rating: state.rating, fav: state.fav, collection: state.collection,
+    color: state.color, ...dateRange(),
   });
+  for (const w of state.more) params.append('more', w);
+  for (const w of state.less) params.append('less', w);
   for (const t of state.tags) params.append('tag', t);
   for (const f of state.file) params.append('f', f);
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
@@ -33,9 +36,11 @@ export function queryParams(extra = {}) {
 // so copying it shares exactly what's on screen.
 export function writeUrl() {
   const params = new URLSearchParams();
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'like', 'rating', 'fav', 'collection']) {
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'like', 'rating', 'fav', 'collection', 'color', 'view']) {
     if (state[key]) params.set(key, state[key]);
   }
+  for (const w of state.more) params.append('more', w);
+  for (const w of state.less) params.append('less', w);
   if (state.range === 'custom') {
     if (state.from) params.set('from', state.from);
     if (state.to) params.set('to', state.to);
@@ -50,9 +55,13 @@ export function writeUrl() {
 // Reads the view from the URL; returns the asset to open, if any.
 export function readUrl() {
   const params = new URLSearchParams(location.search);
-  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'from', 'to', 'like', 'rating', 'fav', 'collection']) {
+  for (const key of ['q', 'kind', 'rights', 'suggested', 'folder', 'sort', 'range', 'from', 'to', 'like', 'rating', 'fav', 'collection', 'color', 'view']) {
     state[key] = params.get(key) || '';
   }
+  if (!/^#[0-9a-f]{6}$/i.test(state.color)) state.color = '';
+  if (state.view !== 'map') state.view = '';
+  state.more = params.getAll('more');
+  state.less = params.getAll('less');
   $('rating').value = state.rating;
   state.tags = new Set(params.getAll('tag'));
   state.file = new Set(params.getAll('f'));

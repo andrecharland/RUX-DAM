@@ -9,6 +9,8 @@ import { loadFields } from './tags.js';
 import { creatorOf, displayName } from './titles.js';
 import { queryParams, writeUrl } from './url.js';
 import { renderRights, renderViewerLabel, renderViewerTags } from './viewer.js';
+import { colorName, renderExplore } from './explore.js';
+import { loadMap } from './map.js';
 
 // Loading results and laying out the grid: tiles, month groups, jump-to-date, paging and refreshes.
 
@@ -30,6 +32,10 @@ export function card(asset) {
       ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '', onload: (e) => sampleColor(asset, e.target) })
       : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
     restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
+    asset.hasThumbnail ? el('button', {
+      type: 'button', class: 'like-btn', text: 'Similar', tabindex: -1, title: 'More like this (S)',
+      'aria-label': `More like ${displayName(asset)}`,
+    }) : '',
     asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',
     asset.suggestions?.count ? el('span', { class: 'ai-dot', text: `✨ ${asset.suggestions.count}`, title: 'Suggestions from Claude to review' }) : '',
     el('button', {
@@ -59,11 +65,15 @@ export const monthName = (key, month = 'long') => new Date(`${key}-01T12:00:00`)
 export function groupOf(a) {
   if (a.match === 'visual') return { key: 'visual', title: `Looks like “${state.q}”`, meta: 'Matched by what’s in the photo' };
   if (state.like) {
+    const words = [...state.more.map((w) => `more ${w}`), ...state.less.map((w) => `less ${w}`)];
     return {
       key: 'like',
-      title: `Looks like ${state.likeName || 'this asset'}`,
+      title: `Looks like ${state.likeName || 'this asset'}${words.length ? `, ${words.join(', ')}` : ''}`,
       meta: state.similarMode === 'visual' ? 'Most similar first' : 'By shared tags, shoot and date (visual fingerprints aren’t ready yet)',
     };
+  }
+  if (state.color && !state.sort) {
+    return { key: 'color', title: `${colorName(state.color)} photos`, meta: 'Most of that color first' };
   }
   const dateOf = DATE_OF[state.sort];
   // A collection's own order (the default sort there) has no date headings.
@@ -97,7 +107,7 @@ export function renderScrubber() {
   const nav = $('scrubber');
   const keys = state.months ? Object.keys(state.months).filter((k) => k !== 'undated').sort() : [];
   if (state.sort !== 'taken-asc') keys.reverse();
-  if (keys.length < 3 || state.like) {
+  if (keys.length < 3 || state.like || state.view === 'map') {
     nav.hidden = true;
     return;
   }
@@ -159,7 +169,10 @@ export async function watchSync() {
     return;
   }
   $('storage-warning').hidden = status.storage !== 'memory';
-  if (status.similarity?.mode === 'visual') $('q').placeholder = 'Search names, tags, or describe a photo…';
+  if (status.similarity?.mode === 'visual') {
+    $('q').placeholder = 'Search names, tags, or describe a photo…';
+    $('view-switch').hidden = false;
+  }
   const waiting = status.syncing && (!status.lastSync || status.restoredFrom);
   state.indexing = status.syncing && !status.lastSync;
   renderMeta();
@@ -215,7 +228,11 @@ export async function load(reset = false) {
     state.fileOrder = data.fileOrder || {};
     renderMeta();
     renderFacets();
-    if (reset) renderScrubber();
+    if (reset) {
+      renderScrubber();
+      renderExplore();
+      if (state.view === 'map') loadMap();
+    }
   } finally {
     if (seq === loadSeq) state.loading = false;
   }

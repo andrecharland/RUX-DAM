@@ -7,6 +7,8 @@ import { renderSuggestions } from './suggest.js';
 import { applyTo, tagEditor } from './tags.js';
 import { creatorOf, displayName, namingDefaults, titleRow } from './titles.js';
 import { writeUrl } from './url.js';
+import { renderPalette } from './explore.js';
+import { clearAllFilters } from './filters.js';
 
 // The asset viewer: media (photos, and videos with a Drive-player fallback), details, rights, navigation, zoom and related assets.
 
@@ -165,6 +167,12 @@ export function open(asset) {
   prefetchNeighbors(asset);
   renderViewerLabel(asset);
   renderCurate(asset);
+  renderPalette(asset, (hex) => {
+    viewer.close();
+    clearAllFilters();
+    state.color = hex;
+    load(true);
+  });
   const rows = [
     ['Format', `${asset.format || ''} (${asset.mimeType})`.replace(/^ \(/, '(')],
     ['Size', formatBytes(asset.size)],

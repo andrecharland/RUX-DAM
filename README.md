@@ -274,8 +274,11 @@ for now; they may come back with an export or crop feature.)
 
 ## More like this and search by description
 
-The viewer's **More like this** shows assets that look similar; **See all** opens them as a
-grid (`?like=<id>`). Without Vertex AI it ranks by shared tags, the same shoot folder, a nearby
+The viewer's **More like this** shows assets that look similar; **Explore from here** (or
+**Similar** on any tile, or <kbd>S</kbd>) opens them as an endless grid (`?like=<id>`). Each
+photo you pick next adds to a trail (`?like=a,b,c`, up to 8): the feed blends them, the latest
+counting most, and the trail bar takes you back to any step. With Vertex AI you can also steer
+it with words: "more snow", "less people" (`?more=snow&less=people`, up to 3 each). Without Vertex AI it ranks by shared tags, the same shoot folder, a nearby
 date and the same shape. With Vertex AI it compares the photos themselves, and the search box
 also finds photos by description ("snowy ride", "red bag on a tailgate"), shown after the name
 and tag matches under **Looks like "…"**.
@@ -293,6 +296,24 @@ After each sync, new assets are fingerprinted in the background from a 512px pre
 results are saved as `embeddings.json` in `DATA_BUCKET`, so it happens only once per file.
 Progress is in `/api/status` under `similarity` (`indexed`, `total`, `pending`, and
 `lastError` if requests fail).
+
+### The visual map
+
+With Vertex AI on, **Map** (beside the thumbnail size; `?view=map`) lays every photo in the
+current results on one zoomable sheet, with photos that look alike next to each other. Zoomed
+out each photo is a square of its color; zoom in (scroll, pinch, +/−) and the photos load.
+Search and filters apply to the map too. The arrangement (UMAP over the fingerprints) is
+worked out in a background thread the first time someone opens the map, about 30 seconds per
+10,000 photos, and saved as `map.json` in `DATA_BUCKET`. Photos fingerprinted later go beside
+the photo they look most like, and the map is rearranged once 10% of photos are new.
+
+## Browse by color
+
+**Color** in the sidebar (`?color=%232f62b8`) shows photos with plenty of that color, most of
+it first; the last swatch picks any color. The viewer shows each photo's main colors, and
+clicking one finds others with that color. After each sync the server works out up to five main
+colors per photo from its 256px preview (a couple at a time, which also fills the preview
+cache) and saves them in `colors.json`. Photos whose preview isn't a JPEG get none.
 
 ## Finding files by date, format and size
 
@@ -391,10 +412,13 @@ src/
   drive.js         Google Drive client (crawl, previews, media); google.js: auth and retries
   store.js         JSON documents in Cloud Storage with conditional writes
   tags.js, rights.js, curation.js, suggest.js, embeddings.js, thumbcache.js: the stores and services
+  palette.js       main colors of each photo, color matching; colors.js stores them
+  layout.js        the visual map's arrangement (layout-worker.js runs UMAP in a thread)
 public/
   index.html, style.css
   js/              ES modules: core (state, DOM, API), url, previews, grid, filters, folders,
-                   tags, selection, suggest, curation, titles, viewer; main.js wires events and starts
+                   tags, selection, suggest, curation, titles, viewer, explore (color, trails,
+                   steering words), map (the visual map); main.js wires events and starts
   naming.js, shopify.js, specs.js   shared with the server (UMD)
 test/              unit and API tests (npm test)
 e2e/               browser tests against a fake Drive, Claude and Vertex AI (npm run test:e2e)

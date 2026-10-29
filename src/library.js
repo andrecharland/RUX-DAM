@@ -6,8 +6,12 @@ const { SuggestionStore } = require('./suggest');
 const { CurationStore } = require('./curation');
 const { ColorStore } = require('./colors');
 const { fileFacets, assetDate, formatOf, SORTS } = require('./fileinfo');
+const { colorScore, lab, parseHex } = require('./palette');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
+
+// Percent of a photo's palette that must be near a color to count as that color.
+const MIN_COLOR_SCORE = 12;
 
 function hashIndex(assets, folders) {
   return crypto.createHash('sha1').update(JSON.stringify([assets, folders])).digest('hex');
@@ -186,6 +190,7 @@ class Library extends EventEmitter {
       suggestions: this.suggestions.resolve(asset.id, tags),
       rating: this.curation.rating(asset.id),
       color: this.colors.get(asset.id),
+      palette: this.colors.palette(asset.id),
     };
   }
 
@@ -256,11 +261,16 @@ class Library extends EventEmitter {
   // those in a collection (in the collection's order unless another sort is
   // chosen), and `favorites` (a Set of ids, the person's favorites) marks items
   // `favorite: true`, or with `favoritesOnly` keeps only those.
+  //
+  // `color` ('#rrggbb') keeps photos with enough of that color in their
+  // palette, most of it first unless another sort is chosen.
   search({
     q = '', kind = '', folder = '', rights = '', tags = [], suggested = '', file = [],
     from = '', to = '', sort = 'modified', offset = 0, limit = 100, rank = null, rankMode = '',
-    rating = 0, collection = '', favorites = null, favoritesOnly = false,
+    rating = 0, collection = '', favorites = null, favoritesOnly = false, color = '',
   } = {}) {
+    const target = /^#[0-9a-f]{6}$/i.test(color) ? lab(parseHex(color)) : null;
+    const colorScores = new Map();
     const picked = collection ? new Map((this.curation.collection(collection)?.items || []).map((id, i) => [id, i])) : null;
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
     const tagFilters = parseTagFilters(tags);
@@ -273,6 +283,11 @@ class Library extends EventEmitter {
       if (picked && !picked.has(a.id)) continue;
       if (favoritesOnly && !favorites?.has(a.id)) continue;
       if (rating && this.curation.rating(a.id) < rating) continue;
+      if (target) {
+        const score = colorScore(this.colors.palette(a.id), target);
+        if (score < MIN_COLOR_SCORE) continue;
+        colorScores.set(a.id, score);
+      }
       if (kind && a.kind !== kind) continue;
       if (folder && !a.ancestors.some((f) => f.id === folder)) continue;
       const day = assetDate(a).slice(0, 10);
@@ -329,6 +344,8 @@ class Library extends EventEmitter {
       matches.sort((x, y) => picked.get(x.id) - picked.get(y.id));
     } else if (rankMode === 'only' && (!sort || sort === 'modified')) {
       matches.sort((x, y) => score(y) - score(x));
+    } else if (target && (!sort || sort === 'modified')) {
+      matches.sort((x, y) => colorScores.get(y.id) - colorScores.get(x.id));
     } else {
       if (SORTS[sort]) matches.sort(SORTS[sort]);
       if (rankMode === 'append') {
@@ -341,7 +358,7 @@ class Library extends EventEmitter {
     // Per-month counts for date headings and jump-to-date, by the sort's date.
     const dateOf = { modified: (v) => v.modifiedTime, added: (v) => v.createdTime, taken: assetDate, 'taken-asc': assetDate }[sort || 'modified'];
     let months = null;
-    if (dateOf && rankMode !== 'only' && !inOrder) {
+    if (dateOf && rankMode !== 'only' && !inOrder && !(target && (!sort || sort === 'modified'))) {
       months = {};
       for (const v of matches) {
         if (v.match) continue;

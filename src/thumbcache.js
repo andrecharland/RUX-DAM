@@ -49,6 +49,18 @@ class ThumbCache {
     return this.pending.get(key);
   }
 
+  // An asset's preview at one of SIZES, from the cache or Drive.
+  preview(drive, asset, size) {
+    return this.fetch(`thumbs/${asset.id}/${thumbVersion(asset)}-${size}`, async () => {
+      const res = await drive.thumbnail(asset.id, size);
+      if (!res?.ok) {
+        await res?.body?.cancel();
+        return null;
+      }
+      return { body: Buffer.from(await res.arrayBuffer()), type: res.headers.get('content-type') || 'image/jpeg' };
+    });
+  }
+
   remember(key, entry) {
     if (entry.body.length > this.maxBytes / 8) return;
     this.memory.set(key, entry);

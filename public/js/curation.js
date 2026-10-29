@@ -189,7 +189,7 @@ grid.addEventListener('dragend', async () => {
 // Collection cards on the home page: the most recently changed, with covers.
 export function renderCollectionCards() {
   const box = $('collection-cards');
-  const home = !state.folder && !state.collection && !state.fav && !state.like && !state.q && !state.kind && !state.rights &&
+  const home = !state.folder && !state.collection && !state.fav && !state.like && !state.color && !state.q && !state.kind && !state.rights &&
     !state.suggested && !state.range && !state.rating && !state.tags.size && !state.file.size;
   const list = state.collections.filter((c) => c.count).slice(0, 8);
   box.hidden = !home || !list.length;

@@ -30,14 +30,7 @@ function mediaRoutes({ library, drive, thumbs }) {
     const asset = library.byId.get(req.params.id);
     const size = snapSize(Number(req.query.size) || 400);
     const v = thumbVersion(asset);
-    const preview = await thumbs.fetch(`thumbs/${asset.id}/${v}-${size}`, async () => {
-      const driveRes = await drive.thumbnail(asset.id, size);
-      if (!driveRes?.ok) {
-        await driveRes?.body?.cancel();
-        return null;
-      }
-      return { body: Buffer.from(await driveRes.arrayBuffer()), type: driveRes.headers.get('content-type') || 'image/jpeg' };
-    });
+    const preview = await thumbs.preview(drive, asset, size);
     if (!preview) return res.sendStatus(404);
     res.set('Cache-Control', req.query.v === v ? 'private, max-age=31536000, immutable' : 'private, max-age=3600');
     res.type(preview.type).send(preview.body);

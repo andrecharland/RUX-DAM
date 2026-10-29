@@ -4,6 +4,7 @@ const path = require('node:path');
 const express = require('express');
 const compression = require('compression');
 const { ThumbCache } = require('./thumbcache');
+const { MapLayout } = require('./layout');
 const { securityHeaders, sameOrigin, rateLimit } = require('./security');
 const { basicAuth } = require('./access');
 const { assetRoutes } = require('./routes/assets');
@@ -17,7 +18,10 @@ const { start, parseFolderIds } = require('./start');
 // The web app: security headers, access control (Google sign-in when
 // `signIn` is given, see auth.js, otherwise the optional shared password),
 // the front end, and the API (routes/).
-function createApp({ library, drive, password, suggester, signIn, similarity, thumbs = new ThumbCache() }) {
+function createApp({
+  library, drive, password, suggester, signIn, similarity, thumbs = new ThumbCache(),
+  layout = similarity ? new MapLayout({ similarity }) : null,
+}) {
   const app = express();
   app.disable('x-powered-by');
   // Cloud Run terminates HTTPS in front of the app; trust its forwarded headers.
@@ -40,7 +44,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
   // runaway script (or a stolen session) from running up a bill.
   const claudeLimit = rateLimit({ max: 30, message: 'Too many Claude requests' });
   const visualLimit = rateLimit({ max: 60 });
-  app.use(assetRoutes({ library, similarity, visualLimit }));
+  app.use(assetRoutes({ library, similarity, visualLimit, layout }));
   app.use(metadataRoutes({ library }));
   app.use(curationRoutes({ library }));
   app.use(suggestRoutes({ library, suggester, claudeLimit }));
