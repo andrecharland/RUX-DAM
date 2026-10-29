@@ -386,11 +386,27 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
   .bar #q { order: 2; flex: 1 1 calc(100% - 140px); }
   .bar .filter-menu { order: 3; }
   .scrubber { display: none; }
-  .viewer { flex-direction: column; }
-  .stage-col { min-height: 50%; }
-  .stage-bar .keys { display: none; }
-  .details { width: auto; border-left: none; border-top: 1px solid var(--line); max-height: 55%; }
+  /* Phone viewer: the photo fills the screen; details are a sheet peeking up
+     from the bottom (name, stars) that expands with a tap or a swipe up.
+     Swipe left/right moves between photos. */
+  #viewer { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; border-radius: 0; }
+  .viewer { display: block; --peek: 150px; }
+  .stage-col { position: absolute; inset: 0 0 var(--peek) 0; }
+  .nav-btn, .filmstrip, .stage-bar .keys, .stage-bar .zoom { display: none; }
+  .stage { touch-action: pan-y pinch-zoom; }
+  .details {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; width: auto; height: 88dvh; box-sizing: border-box;
+    padding-top: 28px; border: none; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.35); background: var(--panel);
+    transform: translateY(calc(100% - var(--peek))); transition: transform .25s ease; overflow: hidden;
+  }
+  .viewer.sheet-open .details { transform: none; overflow: auto; }
+  .sheet-toggle { all: unset; position: absolute; top: 0; left: 0; right: 0; height: 28px; cursor: pointer; display: grid; place-items: center; }
+  .sheet-toggle span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .viewer > .close { top: calc(10px + env(safe-area-inset-top)); background: rgba(28,28,32,.7); color: #fff; box-shadow: none; }
+  #viewer .toast { bottom: 166px; }
 }
+.sheet-toggle { display: none; }
+@media (max-width: 720px) { .sheet-toggle { display: grid; } }
 
 /* Suggestions from Claude */
 .ai-status {

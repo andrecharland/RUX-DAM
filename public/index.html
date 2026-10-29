@@ -246,15 +246,16 @@
         </div>
         <div id="filmstrip" class="filmstrip" aria-label="Nearby assets"></div>
       </div>
-      <aside class="details">
+      <aside class="details" id="details">
+        <button id="sheet-toggle" class="sheet-toggle" type="button" aria-label="Show details" aria-expanded="false"><span></span></button>
         <h2 id="d-name"></h2>
-        <div id="d-label" class="label-row"></div>
         <div class="curate">
           <div id="d-stars" class="stars" role="group" aria-label="Rating (keys 1–5, 0 clears)"></div>
           <button id="d-fav" class="fav-btn" type="button" aria-pressed="false" title="Favorite (F)">♥</button>
           <button id="d-collect" class="btn ghost small" type="button">+ Collection</button>
         </div>
         <div id="d-in" class="in-collections"></div>
+        <div id="d-label" class="label-row"></div>
         <dl id="d-meta"></dl>
         <div class="actions">
           <a id="d-download" class="btn">Download</a>
