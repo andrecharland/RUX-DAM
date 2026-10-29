@@ -71,7 +71,7 @@ async function setup(replies, options = {}) {
   return { library, client, suggester, server, post, get };
 }
 
-const empty = { description: '', product: [], activity: [], color: [], vehicle: [], season: [], tags: [] };
+const empty = { description: '', product: [], activity: [], color: [], vehicle: [], season: [], tags: [], creator: [] };
 
 test('suggests, then accepts and dismisses values as tags', async () => {
   const t = await setup({
@@ -97,7 +97,7 @@ test('suggests, then accepts and dismisses values as tags', async () => {
     assert.strictEqual(req.fallbacks, undefined, 'Haiku has no server-side fallback');
     assert.strictEqual(req.output_config.effort, 'low');
     assert.deepStrictEqual(req.output_config.format.schema.required,
-      ['description', 'product', 'activity', 'color', 'vehicle', 'season', 'tags']);
+      ['description', 'product', 'activity', 'color', 'vehicle', 'season', 'tags', 'creator']);
     assert.strictEqual(req.messages[0].content[0].source.data, Buffer.from('jpeg-bytes-a1').toString('base64'));
     assert.match(req.messages[0].content[1].text, /Folder: Brand \/ Winter Trip/);
     assert.match(req.system[0].text, /- product: Duffel/, 'vocabulary is in the cached system prompt');
@@ -204,7 +204,7 @@ test('shoot suggestions: sample photos from a folder in one request, accept onto
     assert.strictEqual(req.messages[0].content.filter((c) => c.type === 'image').length, 2, 'samples the photos with previews');
     assert.match(req.messages[0].content.at(-1).text, /samples from one shoot folder: Brand \/ Winter Trip/);
     assert.deepStrictEqual(Object.keys(req.output_config.format.schema.properties),
-      ['description', 'activity', 'vehicle', 'season', 'event', 'location', 'tags']);
+      ['description', 'activity', 'vehicle', 'season', 'event', 'location', 'tags', 'creator']);
     assert.deepStrictEqual(folder.suggestions.pending,
       { activity: ['Overlanding'], season: ['Winter'], location: ['Mountains'], tags: ['Lifestyle'] });
 

@@ -348,7 +348,7 @@ function card(asset) {
     thumb,
     el('div', { class: 'caption' }, [
       el('div', { class: 'name', text: displayName(asset), title: asset.label ? `${asset.label.name}\nDrive file: ${asset.name}` : asset.name }),
-      el('div', { class: 'path', text: [asset.collection, asset.path].filter(Boolean).join(' / ') }),
+      el('div', { class: 'path', text: [creatorOf(asset) && `by ${creatorOf(asset)}`, [asset.collection, asset.path].filter(Boolean).join(' / ')].filter(Boolean).join(' · ') }),
       values.length ? el('div', { class: 'chips-line', text: values.join(' · '), title: values.join(', ') }) : '',
       asset.suggestions?.count ? el('div', {
         class: 'ai-line',
@@ -684,6 +684,8 @@ function renderSuggestions(asset) {
 // ---------- labels (RUX naming convention) ----------
 
 const displayName = (item) => item.label?.name || item.name;
+// Creator(s) from the asset's own or inherited Creator tag.
+const creatorOf = (asset) => (asset.tags?.creator || []).map((t) => t.value).join(', ');
 
 // Effective tags of a folder: inherited from enclosing folders, then its own.
 function folderTags(folder) {
@@ -871,6 +873,7 @@ function open(asset) {
     ['Size', formatBytes(asset.size)],
     ['Dimensions', asset.width ? `${asset.width} × ${asset.height}` : '—'],
     ...(asset.kind === 'video' ? [['Duration', formatDuration(asset.durationMs) || '—']] : []),
+    ['Creator', creatorOf(asset) || '— (add one under Metadata)'],
     ['Folder', [asset.collection, asset.path].filter(Boolean).join(' / ')],
     ...(asset.takenTime ? [['Taken', new Date(asset.takenTime).toLocaleString()]] : []),
     ...(asset.camera ? [['Camera', asset.camera]] : []),

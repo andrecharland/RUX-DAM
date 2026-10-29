@@ -5,8 +5,8 @@ const { JsonStore } = require('./store');
 
 const DEFAULT_MODEL = 'claude-haiku-5-5';
 // Fields Claude fills in per photo, and per shoot (from sample photos of a folder).
-const DEFAULT_FIELDS = ['product', 'activity', 'color', 'vehicle', 'season', 'tags'];
-const FOLDER_FIELDS = ['activity', 'season', 'location', 'event', 'vehicle', 'tags'];
+const DEFAULT_FIELDS = ['product', 'activity', 'color', 'vehicle', 'season', 'creator', 'tags'];
+const FOLDER_FIELDS = ['activity', 'season', 'location', 'event', 'vehicle', 'creator', 'tags'];
 const FOLDER_SAMPLES = 6;
 // Runs bigger than this go through the Message Batches API (half price, results within hours).
 const BATCH_MIN = 50;
@@ -32,6 +32,7 @@ const FIELD_GUIDE = {
   location: 'The kind of place (e.g. Mountains, Desert, Beach, Forest, City, Studio). Never guess a specific named place unless it is written in the image or folder path.',
   event: 'Only an event named in the folder path or file name.',
   people: 'Only names given in the folder path or file name. Never identify people from their appearance.',
+  creator: 'The photographer, videographer or creator who made it, only when named in the folder path or file name (e.g. "justin ross - …", "…_Cal_2026-06-08_v01"). Empty otherwise; never guess from the image.',
   tags: 'A few other keywords someone would search for: shot type (Lifestyle, Detail, Studio, Action, Landscape), setting, mood.',
 };
 
