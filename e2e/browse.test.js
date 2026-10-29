@@ -2,7 +2,7 @@
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
-const { playwright, startApp, launch } = require('./fixture');
+const { playwright, startApp, launch, filterBy } = require('./fixture');
 
 describe('browsing and search', { skip: !playwright && 'playwright is not installed' }, () => {
   let app;
@@ -80,10 +80,11 @@ describe('browsing and search', { skip: !playwright && 'playwright is not instal
 
   it('shows filters as chips, removes them, and keeps the view in the URL', async () => {
     await fresh();
-    await page.selectOption('#kind', 'video');
+    await filterBy(page, '#kind', 'video');
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('2 '));
-    await page.selectOption('#rights', 'cleared');
+    await filterBy(page, '#rights', 'cleared');
     await page.waitForSelector('.fchip:has-text("Rights")');
+    assert.strictEqual(await page.textContent('#filter-count'), '2', 'active choices on the Filter & sort button');
     assert.ok(await page.isHidden('#folder-cards'), 'folder cards hide while filtering');
     await page.reload();
     await page.waitForSelector('.fchip:has-text("Videos")');

@@ -10,33 +10,53 @@
   <header class="bar">
     <button id="toggle-side" class="icon-btn" type="button" aria-label="Folders and filters">☰</button>
     <h1>RUX <span>Assets</span></h1>
-    <input id="q" type="search" placeholder="Search names, folders, tags…" autocomplete="off">
-    <select id="kind" aria-label="Type">
-      <option value="">All types</option>
-      <option value="image">Images</option>
-      <option value="video">Videos</option>
-    </select>
-    <select id="rights" aria-label="Usage rights">
-      <option value="">Any rights</option>
-      <option value="cleared">Cleared to use</option>
-      <option value="restricted">Do not use</option>
-    </select>
-    <select id="suggested" aria-label="Suggestions" hidden>
-      <option value="">All assets</option>
-      <option value="pending">✨ Suggestions to review</option>
-    </select>
-    <select id="sort" aria-label="Sort">
-      <option value="">Recently modified</option>
-      <option value="taken">Newest taken</option>
-      <option value="taken-asc">Oldest taken</option>
-      <option value="added">Recently added</option>
-      <option value="name">Name A–Z</option>
-      <option value="size">Largest file</option>
-      <option value="duration">Longest video</option>
-      <option value="rating">Highest rated</option>
-    </select>
-    <button id="sync" type="button" title="Re-scan Google Drive">Sync</button>
-    <span id="user" class="user" hidden></span>
+    <input id="q" type="search" placeholder="Search names, folders, tags…" autocomplete="off" aria-label="Search">
+    <details id="filter-menu" class="menu filter-menu">
+      <summary class="btn ghost">Filter &amp; sort <span id="filter-count" class="count-badge" hidden></span></summary>
+      <div class="menu-pop menu-form">
+        <label>Type
+          <select id="kind">
+            <option value="">All types</option>
+            <option value="image">Images</option>
+            <option value="video">Videos</option>
+          </select>
+        </label>
+        <label>Usage rights
+          <select id="rights">
+            <option value="">Any rights</option>
+            <option value="cleared">Cleared to use</option>
+            <option value="restricted">Do not use</option>
+          </select>
+        </label>
+        <label id="suggested-field" hidden>Claude
+          <select id="suggested">
+            <option value="">All assets</option>
+            <option value="pending">✨ Suggestions to review</option>
+          </select>
+        </label>
+        <label>Sort by
+          <select id="sort">
+            <option value="">Recently modified</option>
+            <option value="taken">Newest taken</option>
+            <option value="taken-asc">Oldest taken</option>
+            <option value="added">Recently added</option>
+            <option value="name">Name A–Z</option>
+            <option value="size">Largest file</option>
+            <option value="duration">Longest video</option>
+            <option value="rating">Highest rated</option>
+          </select>
+        </label>
+      </div>
+    </details>
+    <details id="user-menu" class="menu user-menu">
+      <summary class="avatar" aria-label="Account and sync"><span id="avatar">•</span></summary>
+      <div class="menu-pop">
+        <div id="user" class="user-info" hidden></div>
+        <button id="sync" type="button"><strong>Sync with Google Drive</strong><span>Check Drive for new and changed files now</span></button>
+        <button id="shortcuts-open" type="button"><strong>Keyboard shortcuts</strong><span>Press ? any time</span></button>
+        <a id="sign-out" href="/auth/logout" hidden><strong>Sign out</strong></a>
+      </div>
+    </details>
   </header>
 
   <div class="layout">

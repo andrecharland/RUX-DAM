@@ -36,8 +36,7 @@ describe('viewer', { skip: !playwright && 'playwright is not installed' }, () =>
     assert.ok(await page.locator('#filmstrip button.current').count() === 1);
     assert.match(new URL(page.url()).search, /asset=/, 'open asset is in the URL');
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => !document.querySelector('#viewer').open);
-    assert.doesNotMatch(new URL(page.url()).search, /asset=/);
+    await page.waitForFunction(() => !document.querySelector('#viewer').open && !location.search.includes('asset='));
   });
 
   it('fits tall photos on screen, zooms, and keeps the close button in view', async () => {

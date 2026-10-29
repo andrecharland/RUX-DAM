@@ -360,6 +360,11 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
   body.side-open .side { transform: none; }
 }
 @media (max-width: 720px) {
+  /* Two rows: menu, title and account; then search and Filter & sort. */
+  .bar h1 { flex: 1 1 auto; }
+  .bar .user-menu { order: 1; }
+  .bar #q { order: 2; flex: 1 1 calc(100% - 140px); }
+  .bar .filter-menu { order: 3; }
   .scrubber { display: none; }
   .viewer { flex-direction: column; }
   .stage-col { min-height: 50%; }
@@ -420,8 +425,19 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .empty-note.small { font-size: 12px; margin: 6px 0 0; }
 #file-facets .facet { margin-top: 14px; }
 
-.user { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
-.user a { color: var(--select); text-decoration: none; }
+.count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
+  border-radius: 9px; background: var(--select); color: #fff; font-size: 11px; font-weight: 600; }
+.menu-form { width: 240px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.menu-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.menu-form select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; color: var(--text); }
+.user-menu .avatar { list-style: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--chip); font-weight: 600; user-select: none; }
+.user-menu .avatar::-webkit-details-marker { display: none; }
+.user-menu .menu-pop { width: 260px; }
+.user-info { display: flex; flex-direction: column; padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.user-info span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.menu-pop a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text); text-decoration: none; }
+.menu-pop a:hover { background: var(--chip); }
 
 /* Labels (RUX naming convention) */
 .label-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }

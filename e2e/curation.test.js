@@ -2,7 +2,7 @@
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
-const { playwright, startApp, launch } = require('./fixture');
+const { playwright, startApp, launch, filterBy } = require('./fixture');
 
 describe('ratings, favorites and collections', { skip: !playwright && 'playwright is not installed' }, () => {
   let app;
@@ -74,7 +74,7 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.waitForFunction(() => document.querySelector('#meta').textContent.startsWith('3 '));
     assert.match(await page.textContent('#chips'), /★★★★★/);
     await page.selectOption('#rating', '');
-    await page.selectOption('#sort', 'rating');
+    await filterBy(page, '#sort', 'rating');
     await page.waitForFunction(() => document.querySelectorAll('#grid .card').length > 10);
     const stars = await page.locator('#grid .card').evaluateAll((cs) => cs.slice(0, 5).map((c) => c.querySelector('.stars-badge')?.textContent || ''));
     assert.deepStrictEqual(stars, ['★★★★★', '★★★★★', '★★★★★', '★★★★', '']);

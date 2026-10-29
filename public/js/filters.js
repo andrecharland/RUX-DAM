@@ -18,6 +18,10 @@ export function clearAllFilters() {
 }
 
 export function renderChips() {
+  // How many Filter & sort choices are active, on the button in the top bar.
+  const active = [state.kind, state.rights, state.suggested].filter(Boolean).length;
+  $('filter-count').hidden = !active;
+  $('filter-count').textContent = active;
   const chips = [];
   const add = (key, value, remove) => chips.push(el('span', { class: 'fchip' }, [
     el('span', { class: 'k', text: `${key}:` }),

@@ -189,4 +189,10 @@ async function launch() {
   };
 }
 
-module.exports = { playwright, startApp, launch, SHOOTS, quiet };
+// Picks a value in the top bar's Filter & sort menu (opening it if needed).
+async function filterBy(page, select, value) {
+  if (!(await page.locator('#filter-menu').evaluate((d) => d.open))) await page.click('#filter-menu summary');
+  await page.selectOption(select, value);
+}
+
+module.exports = { playwright, startApp, launch, filterBy, SHOOTS, quiet };

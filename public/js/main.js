@@ -210,16 +210,20 @@ document.addEventListener('click', (e) => {
   }
 });
 
-$('sync').addEventListener('click', async (e) => {
-  e.target.disabled = true;
-  e.target.textContent = 'Syncing…';
+$('sync').addEventListener('click', async () => {
+  const button = $('sync');
+  const label = button.querySelector('span');
+  button.disabled = true;
+  label.textContent = 'Syncing…';
   try {
-    await fetch('/api/sync', { method: 'POST' });
+    await api('/api/sync', {});
     await Promise.all([loadFields(), loadFolders()]);
     await load(true);
+    label.textContent = 'Up to date';
+  } catch (err) {
+    label.textContent = err.message;
   } finally {
-    e.target.disabled = false;
-    e.target.textContent = 'Sync';
+    button.disabled = false;
   }
 });
 
@@ -231,11 +235,10 @@ new IntersectionObserver((entries) => {
 export async function showUser() {
   const user = await api('/api/me').catch(() => null);
   if (!user) return;
+  $('avatar').textContent = (user.name || user.email).trim()[0].toUpperCase();
   $('user').hidden = false;
-  $('user').replaceChildren(
-    el('span', { text: user.email, title: user.name || user.email }),
-    el('a', { href: '/auth/logout', text: 'Sign out' }),
-  );
+  $('user').replaceChildren(el('strong', { text: user.name || user.email }), el('span', { text: user.email }));
+  $('sign-out').hidden = false;
 }
 
 (async () => {
@@ -264,14 +267,14 @@ $('p-direct').addEventListener('click', () => state.current && showVideo(state.c
 
 $('p-drive').addEventListener('click', () => state.current && showVideo(state.current, 'drive'));
 
-// Close the folder's Suggest menu on a click elsewhere or Escape.
+// Pop-up menus (Filter & sort, account, the folder's Suggest menu) close on a
+// click elsewhere or Escape, and only one is open at a time.
+const menus = () => document.querySelectorAll('details.menu[open]');
 document.addEventListener('click', (e) => {
-  const menu = $('folder-suggest-menu');
-  if (menu.open && !menu.contains(e.target)) menu.open = false;
+  for (const menu of menus()) if (!menu.contains(e.target)) menu.open = false;
 });
-
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') $('folder-suggest-menu').open = false;
+  if (e.key === 'Escape') for (const menu of menus()) menu.open = false;
 });
 
 // A thumbnail that fails (Drive busy or a link expiring) is retried once after a

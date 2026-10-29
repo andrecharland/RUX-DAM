@@ -13,7 +13,7 @@ export async function refreshAi() {
     state.ai = { enabled: false };
   }
   const ai = state.ai;
-  $('suggested').hidden = !ai.enabled && !state.suggested;
+  $('suggested-field').hidden = !ai.enabled && !state.suggested;
   const active = (ai.queued || 0) + (ai.running || 0) > 0 || Boolean(ai.preparing);
   const batches = ai.batches || [];
   const busy = active || batches.length > 0;
@@ -45,7 +45,7 @@ export async function refreshAi() {
       el('button', { type: 'button', class: 'link', text: 'Review suggestions', onclick: () => {
         state.suggested = 'pending';
         $('suggested').value = 'pending';
-        $('suggested').hidden = false;
+        $('suggested-field').hidden = false;
         load(true);
       } }),
       el('button', { type: 'button', class: 'link', text: 'Hide', onclick: () => { bar.hidden = true; } }),
