@@ -212,10 +212,17 @@ $('new-collection').addEventListener('click', () => openCollect([...state.select
 
 $('rating').addEventListener('change', (e) => { state.rating = e.target.value; load(true); });
 
-$('bulk-rate').addEventListener('change', async (e) => {
-  if (e.target.value === '') return;
-  await rate([...state.selected], Number(e.target.value));
-  e.target.value = '';
+// The selection bar's Rate menu: five stars, and Clear rating.
+$('bulk-stars').replaceChildren(...[1, 2, 3, 4, 5].map((n) => el('button', {
+  type: 'button', text: '★', title: plural(n, 'star'), 'aria-label': plural(n, 'star'),
+  onclick: () => {
+    $('bulk-rate-menu').open = false;
+    rate([...state.selected], n);
+  },
+})));
+$('bulk-unrate').addEventListener('click', () => {
+  $('bulk-rate-menu').open = false;
+  rate([...state.selected], 0);
 });
 
 $('bulk-fav').addEventListener('click', () => favorite([...state.selected], true));

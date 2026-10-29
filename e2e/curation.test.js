@@ -49,7 +49,8 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.waitForSelector('#d-in .chip:has-text("Spring launch")');
     await page.keyboard.press('Escape');
     for (const n of [3, 1, 2]) await card(n).locator('.pick').click();
-    await page.selectOption('#bulk-rate', '5');
+    await page.click('#bulk-rate-menu summary');
+    await page.click('#bulk-stars button >> nth=4');
     await page.waitForFunction(() => document.querySelectorAll('.stars-badge').length >= 4);
     await page.click('#bulk-collect');
     await page.click('.collect-item:has-text("Spring launch") input');
@@ -57,6 +58,24 @@ describe('ratings, favorites and collections', { skip: !playwright && 'playwrigh
     await page.click('#collect-close');
     await page.click('#bulk-clear');
     assert.match(await page.textContent('#collections'), /Spring launch\s*4/);
+  });
+
+  it('tags and downloads a selection from the selection bar', async () => {
+    await page.click('#tree button:has-text("All assets")');
+    await page.waitForSelector('#grid .card img');
+    for (const n of [5, 6]) await card(n).locator('.pick').click();
+    assert.strictEqual(await page.textContent('#bulk-count'), '2 selected');
+    await page.click('#bulk-tag-menu summary');
+    await page.selectOption('#bulk-editor select', 'color');
+    await page.fill('#bulk-editor input', 'Sand');
+    await page.click('#bulk-editor button:has-text("Add")');
+    await page.waitForFunction(() => [...document.querySelectorAll('#grid .card')].slice(5, 7).every((c) => c.textContent.includes('Sand')));
+    await page.keyboard.press('Escape'); // closes the menu, keeps the selection
+    assert.ok(await page.isVisible('#bulk'));
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#bulk-download')]);
+    assert.strictEqual(download.suggestedFilename(), 'RUX selection.zip');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.getElementById('bulk').hidden);
   });
 
   it('opens a collection in the order items were added, and removes from it', async () => {

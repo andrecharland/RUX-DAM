@@ -114,3 +114,39 @@ test('only raster images and video open inline', () => {
   assert.ok(!inlineSafe('text/html'));
   assert.ok(!inlineSafe(null));
 });
+
+test('several files download as one zip, with unique names', async () => {
+  const root = { id: 'root', name: 'Brand' };
+  const drive = {
+    crawl: async () => ({
+      assets: [
+        toAsset({ id: 'a1', name: 'shot.jpg', mimeType: 'image/jpeg', size: '5', modifiedTime: '2026-01-01T00:00:00Z' }, '', 'Brand', [root]),
+        toAsset({ id: 'a2', name: 'shot.jpg', mimeType: 'image/jpeg', size: '5', modifiedTime: '2026-01-01T00:00:00Z' }, '', 'Brand', [root]),
+        toAsset({ id: 'gone', name: 'gone.jpg', mimeType: 'image/jpeg', size: '5', modifiedTime: '2026-01-01T00:00:00Z' }, '', 'Brand', [root]),
+      ],
+      folders: [{ id: 'root', name: 'Brand', path: '', ancestors: [] }],
+    }),
+    media: async (id) => (id === 'gone' ? new Response('', { status: 404 }) : new Response(`bytes-of-${id}`, { headers: { 'content-type': 'image/jpeg' } })),
+  };
+  const library = new Library(drive, ['root'], { tags: new TagStore({ log: quiet }), curation: new CurationStore({ log: quiet }), log: quiet });
+  await library.sync();
+  const server = createApp({ library, drive }).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (body) => fetch(`${base}/api/download`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body),
+  });
+  try {
+    const res = await post({ ids: 'a1,a2,gone,unknown', name: 'Spring launch' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get('content-type'), 'application/zip');
+    assert.match(res.headers.get('content-disposition'), /Spring%20launch\.zip/);
+    const zip = Buffer.from(await res.arrayBuffer()).toString('latin1');
+    assert.ok(zip.startsWith('PK'));
+    for (const text of ['shot.jpg', 'shot (2).jpg', 'bytes-of-a1', 'bytes-of-a2', 'gone.jpg.error.txt']) assert.ok(zip.includes(text), text);
+    assert.strictEqual((await post({ ids: 'unknown' })).status, 400);
+    library.byId.get('a1').size = 5e9;
+    assert.strictEqual((await post({ ids: 'a1' })).status, 400, 'too big');
+  } finally {
+    server.close();
+  }
+});

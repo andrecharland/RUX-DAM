@@ -140,10 +140,10 @@ input, select, button, .btn { font: inherit; color: var(--text); }
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 4; width: 260px; padding: 6px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
 }
-.menu-pop button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 6px; }
-.menu-pop button:hover, .menu-pop button:focus-visible { background: var(--chip); }
-.menu-pop button:disabled { opacity: .6; cursor: default; }
-.menu-pop span { color: var(--muted); font-size: 12px; }
+.menu-pop > button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 6px; }
+.menu-pop > button:hover, .menu-pop > button:focus-visible { background: var(--chip); }
+.menu-pop > button:disabled { opacity: .6; cursor: default; }
+.menu-pop > button span { color: var(--muted); font-size: 12px; }
 .hint { margin: 0 0 8px; color: var(--muted); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 12px 16px; }
 .meta { margin: 0; color: var(--muted); }
@@ -289,7 +289,15 @@ input, select, button, .btn { font: inherit; color: var(--text); }
   padding: 12px 16px; border-radius: 12px;
   background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 30px rgba(0,0,0,.18);
 }
-.bulk-editor { flex: 1; min-width: 260px; }
+.bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; align-items: center; }
+.bulk-actions .btn { padding: 7px 12px; }
+.bulk-clear { all: unset; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; text-align: center; line-height: 32px; font-size: 20px; color: var(--muted); }
+.bulk-clear:hover { background: var(--chip); color: var(--text); }
+/* Menus in the selection bar open upwards. */
+.menu.up .menu-pop { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; }
+.menu-form.wide { width: min(460px, calc(100vw - 48px)); }
+.stars.big { display: flex; padding: 6px 8px; }
+.stars.big button { font-size: 26px; }
 .bulk .editor .add-row { margin-top: 0; }
 
 dialog {
@@ -398,8 +406,6 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
 .suggest .err { color: var(--danger); font-size: 13px; margin: 0 0 6px; }
 .suggest .row-actions { display: flex; gap: 8px; margin-top: 8px; }
 .suggest .row-actions .btn { padding: 6px 10px; font-size: 13px; }
-.bulk-ai { display: flex; gap: 8px; }
-.bulk-ai .btn { color: var(--ai); border-color: var(--ai); }
 
 /* Field values editor */
 .side-links { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -489,8 +495,6 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .collect-new { display: flex; gap: 8px; }
 .collect-new input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .collect-msg { min-height: 1.3em; margin: 0; color: var(--muted); font-size: 13px; }
-.bulk-curate { display: flex; flex-wrap: wrap; gap: 8px; }
-.bulk-curate select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 /* Thumbnails that couldn't load: a quiet placeholder instead of the broken-image icon. */
 img.failed { visibility: hidden; }
 /* The viewer shows the grid preview first, softened until the sharp one arrives. */

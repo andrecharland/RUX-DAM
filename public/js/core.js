@@ -75,3 +75,11 @@ export async function copyText(button, text) {
 
 
 export const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+// Saves the originals of `ids` as one zip, streamed by the server.
+export function downloadZip(ids, name) {
+  const form = $('download-form');
+  form.elements.ids.value = ids.join(',');
+  form.elements.name.value = name;
+  form.submit();
+}

@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const archiver = require('archiver');
 const { Readable } = require('node:stream');
 const { snapSize, thumbVersion } = require('../thumbcache');
 const { limitRange, inlineSafe, MAX_RESPONSE } = require('../security');
@@ -52,10 +53,7 @@ function mediaRoutes({ library, drive, thumbs }) {
     const disposition = req.query.download || !inlineSafe(type) ? 'attachment' : 'inline';
     res.set('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self'; media-src 'self'");
     // Downloads are named by the asset's RUX_ name, keeping the original extension.
-    const label = library.tags.label(asset);
-    const ext = /\.[A-Za-z0-9]{1,5}$/.exec(asset.name)?.[0] || '';
-    const filename = label?.name ? `${label.name}${ext}` : asset.name;
-    res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName(library, asset))}`);
     res.set('Cache-Control', 'private, max-age=3600');
     // A whole-file response is streamed without a length (chunked), which
     // Cloud Run allows at any size; with a length it caps responses at 32 MB.
@@ -64,7 +62,64 @@ function mediaRoutes({ library, drive, thumbs }) {
       ...(length && length < MAX_RESPONSE ? ['content-length'] : [])]);
   });
 
+  // Several originals as one zip, streamed as it's built (nothing is held in
+  // memory or on disk): a form POST with ids (comma separated) and an optional
+  // name for the zip. Files are stored as-is (photos and video don't compress).
+  router.post('/api/download', express.urlencoded({ extended: false, limit: '1mb' }), async (req, res) => {
+    const ids = [...new Set(String(req.body?.ids || '').split(',').filter((id) => library.has(id)))];
+    if (!ids.length) return res.status(400).send('Nothing to download');
+    if (ids.length > MAX_ZIP_FILES) return res.status(400).send(`Download at most ${MAX_ZIP_FILES} files at a time`);
+    const assets = ids.map((id) => library.byId.get(id));
+    const bytes = assets.reduce((n, a) => n + (a.size || 0), 0);
+    if (bytes > MAX_ZIP_BYTES) {
+      return res.status(400).send(`That's ${(bytes / 1e9).toFixed(1)} GB; download at most ${MAX_ZIP_BYTES / 1e9} GB at a time`);
+    }
+    const zipName = `${String(req.body?.name || 'RUX assets').replace(/[^\w .()-]+/g, '').trim().slice(0, 80) || 'RUX assets'}.zip`;
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(zipName)}`);
+    res.set('Cache-Control', 'no-store');
+    const zip = archiver('zip', { store: true });
+    zip.on('warning', (err) => console.warn(`Zip: ${err.message}`));
+    zip.on('error', (err) => {
+      console.error(`Zip failed: ${err.message}`);
+      res.destroy(err);
+    });
+    zip.pipe(res);
+    const used = new Set();
+    for (const asset of assets) {
+      if (res.destroyed) break;
+      const driveRes = await drive.media(asset.id);
+      if (!driveRes.ok) {
+        await driveRes.body?.cancel();
+        zip.append(`Couldn't download ${asset.name} from Google Drive (${driveRes.status}).\n`, { name: unique(`${fileName(library, asset)}.error.txt`, used) });
+        continue;
+      }
+      const done = new Promise((resolve) => zip.once('entry', resolve));
+      zip.append(Readable.fromWeb(driveRes.body), { name: unique(fileName(library, asset), used), date: asset.modifiedTime ? new Date(asset.modifiedTime) : undefined });
+      await done; // one file at a time
+    }
+    await zip.finalize();
+  });
+
   return router;
 }
 
-module.exports = { mediaRoutes };
+const MAX_ZIP_FILES = 1000;
+const MAX_ZIP_BYTES = 4e9;
+
+// The download name: the RUX_ name (keeping the extension) or the Drive name.
+function fileName(library, asset) {
+  const label = library.tags.label(asset);
+  const ext = /\.[A-Za-z0-9]{1,5}$/.exec(asset.name)?.[0] || '';
+  return (label?.name ? `${label.name}${ext}` : asset.name).replace(/[\\/:*?"<>|]+/g, '_');
+}
+
+// "a.jpg", "a (2).jpg", … so files with the same name don't overwrite each other.
+function unique(name, used) {
+  let candidate = name;
+  for (let n = 2; used.has(candidate.toLowerCase()); n++) candidate = name.replace(/(\.[^.]*)?$/, ` (${n})$1`);
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+
+module.exports = { mediaRoutes, fileName };

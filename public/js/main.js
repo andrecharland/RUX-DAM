@@ -1,4 +1,4 @@
-import { $, api, copyText, el, grid, state, viewer } from './core.js';
+import { $, api, copyText, downloadZip, el, grid, state, viewer } from './core.js';
 import { favorite, loadCollections, rate } from './curation.js';
 import { clearAllFilters, renderChips } from './filters.js';
 import { folderUi, loadFolders, selectFolder, setFolderDetails } from './folders.js';
@@ -51,7 +51,10 @@ $('bulk-clear').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !viewer.open && state.selected.size) $('bulk-clear').click();
+  // Escape closes an open menu first; only then does it clear the selection.
+  if (e.key === 'Escape' && !viewer.open && state.selected.size && !document.querySelector('details.menu[open]')) {
+    $('bulk-clear').click();
+  }
   // "/" searches and "?" lists the shortcuts, unless typing or in a dialog.
   if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (document.querySelector('dialog[open]')) return;
@@ -188,9 +191,18 @@ $('suggested').addEventListener('change', (e) => { state.suggested = e.target.va
 
 $('copy-view').addEventListener('click', (e) => copyText(e.target, location.href));
 
-$('bulk-suggest').addEventListener('click', () => queueSuggestions({ ids: [...state.selected] }, state.selected.size));
+$('bulk-suggest').addEventListener('click', () => {
+  $('bulk-ai').open = false;
+  queueSuggestions({ ids: [...state.selected] }, state.selected.size);
+});
 
-$('bulk-accept').addEventListener('click', () => accept({ ids: [...state.selected] }));
+// Downloads the selection as a zip (a form POST, so the browser saves it as it streams).
+$('bulk-download').addEventListener('click', () => downloadZip([...state.selected], 'RUX selection'));
+
+$('bulk-accept').addEventListener('click', () => {
+  $('bulk-ai').open = false;
+  accept({ ids: [...state.selected] });
+});
 
 $('clear-filters').addEventListener('click', () => {
   state.tags.clear();

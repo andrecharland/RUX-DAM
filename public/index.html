@@ -187,27 +187,36 @@
 
   <div id="bulk" class="bulk" hidden>
     <strong id="bulk-count"></strong>
-    <div id="bulk-editor" class="bulk-editor"></div>
-    <div class="bulk-ai" id="bulk-ai" hidden>
-      <button id="bulk-suggest" class="btn ghost" type="button">✨ Suggest tags</button>
-      <button id="bulk-accept" class="btn ghost" type="button">Accept suggestions</button>
-    </div>
-    <div class="bulk-curate">
-      <select id="bulk-rate" aria-label="Rate the selected assets">
-        <option value="">★ Rate…</option>
-        <option value="1">★</option>
-        <option value="2">★★</option>
-        <option value="3">★★★</option>
-        <option value="4">★★★★</option>
-        <option value="5">★★★★★</option>
-        <option value="0">Clear rating</option>
-      </select>
+    <div class="bulk-actions">
+      <details id="bulk-tag-menu" class="menu up">
+        <summary class="btn ghost">Tag</summary>
+        <div class="menu-pop menu-form wide"><div id="bulk-editor"></div></div>
+      </details>
+      <details id="bulk-rate-menu" class="menu up">
+        <summary class="btn ghost">★ Rate</summary>
+        <div class="menu-pop">
+          <div id="bulk-stars" class="stars big" role="group" aria-label="Rate the selection"></div>
+          <button id="bulk-unrate" type="button"><strong>Clear rating</strong></button>
+        </div>
+      </details>
       <button id="bulk-fav" class="btn ghost" type="button">♥ Favorite</button>
       <button id="bulk-collect" class="btn ghost" type="button">Add to collection…</button>
-      <button id="bulk-uncollect" class="btn ghost" type="button" hidden>Remove from this collection</button>
+      <details id="bulk-ai" class="menu up" hidden>
+        <summary class="btn ghost ai-btn">✨ Suggest</summary>
+        <div class="menu-pop">
+          <button id="bulk-suggest" type="button"><strong>Suggest tags</strong><span>Claude looks at each selected photo</span></button>
+          <button id="bulk-accept" type="button"><strong>Accept suggestions</strong><span>Add everything Claude suggested for these</span></button>
+        </div>
+      </details>
+      <button id="bulk-download" class="btn ghost" type="button">Download</button>
+      <button id="bulk-uncollect" class="btn ghost" type="button" hidden>Remove from collection</button>
     </div>
-    <button id="bulk-clear" class="btn ghost" type="button">Clear selection</button>
+    <button id="bulk-clear" class="bulk-clear" type="button" aria-label="Clear selection (Esc)" title="Clear selection (Esc)">×</button>
   </div>
+  <form id="download-form" method="post" action="/api/download" hidden>
+    <input type="hidden" name="ids">
+    <input type="hidden" name="name">
+  </form>
 
   <dialog id="viewer">
     <div class="viewer">
