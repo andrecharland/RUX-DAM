@@ -14,7 +14,7 @@ export const state = {
   current: null, selected: new Set(), lastPicked: null,
   fields: [], folders: new Map(), expanded: new Set(), facetsOpen: new Set(),
   like: '', likeName: '', similarMode: '', months: null, zoom: 0, showAllFolders: false,
-  rating: '', fav: '', collection: '', collections: [], favCount: 0,
+  rating: '', fav: '', collection: '', collections: [], favCount: 0, treeFilter: '',
 };
 
 

@@ -75,7 +75,16 @@ input, select, button, .btn { font: inherit; color: var(--text); }
 }
 .side section + section { margin-top: 24px; }
 .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
-.side-head { display: flex; justify-content: space-between; align-items: baseline; }
+.side-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.side .side-head h2 { margin: 0; }
+.sec-toggle { all: unset; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.sec-toggle:focus-visible { outline: 2px solid var(--select); border-radius: 4px; }
+.sec-toggle .chev { color: var(--muted); transition: transform .15s; }
+.side-sec.closed .chev { transform: rotate(-90deg); }
+.side-sec.closed .sec-body { display: none; }
+.side-sec.closed .side-head { margin-bottom: 0; }
+.side-filter { width: 100%; box-sizing: border-box; margin: 0 0 6px; padding: 6px 8px; font-size: 13px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
 .main { flex: 1; min-width: 0; padding-bottom: 96px; }
 
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
@@ -415,7 +424,6 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .storage-warning code { font-size: 12px; }
 
 /* File details filters */
-.side h2.subhead { margin-top: 20px; }
 .date-range, .date-custom input {
   font: inherit; color: var(--text); background: var(--bg);
   border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%;

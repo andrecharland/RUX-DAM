@@ -73,23 +73,32 @@ export function facetGroup({ key, label, counts, selected, order, onToggle }) {
   else if (order === 'desc') values.sort((a, b) => b[0].localeCompare(a[0]));
   else values.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const open = state.facetsOpen.has(key);
-  const shown = open ? values : values.slice(0, FACET_LIMIT);
-  return el('div', { class: 'facet' }, [
-    el('h3', { text: label }),
-    ...shown.map(([value, count]) => {
-      const id = `${key}:${value}`;
-      return el('label', {}, [
-        el('input', { type: 'checkbox', checked: selected.has(id), onchange: (e) => onToggle(id, e.target.checked) }),
-        el('span', { text: value }),
-        el('span', { class: 'count', text: count }),
-      ]);
-    }),
-    values.length > FACET_LIMIT ? el('button', {
-      type: 'button', class: 'link more',
-      text: open ? 'Show less' : `Show ${values.length - FACET_LIMIT} more`,
-      onclick: () => { state.facetsOpen[open ? 'delete' : 'add'](key); renderFacets(); },
-    }) : '',
-  ]);
+  const rows = values.map(([value, count], i) => {
+    const id = `${key}:${value}`;
+    return el('label', { hidden: !open && i >= FACET_LIMIT && !selected.has(id), 'data-value': value.toLowerCase() }, [
+      el('input', { type: 'checkbox', checked: selected.has(id), onchange: (e) => onToggle(id, e.target.checked) }),
+      el('span', { text: value }),
+      el('span', { class: 'count', text: count }),
+    ]);
+  });
+  const more = values.length > FACET_LIMIT ? el('button', {
+    type: 'button', class: 'link more',
+    text: open ? 'Show less' : `Show ${values.length - FACET_LIMIT} more`,
+    onclick: () => { state.facetsOpen[open ? 'delete' : 'add'](key); renderFacets(); },
+  }) : '';
+  // Long lists get a box that narrows them as you type (in place, so typing
+  // isn't interrupted).
+  const find = values.length > 12 ? el('input', {
+    type: 'search', class: 'side-filter', placeholder: `Find ${label.toLowerCase()}…`, 'aria-label': `Find ${label}`,
+    oninput: (e) => {
+      const term = e.target.value.trim().toLowerCase();
+      rows.forEach((row, i) => {
+        row.hidden = term ? !row.dataset.value.includes(term) : !open && i >= FACET_LIMIT && !row.querySelector('input').checked;
+      });
+      if (more) more.hidden = Boolean(term);
+    },
+  }) : '';
+  return el('div', { class: 'facet' }, [el('h3', { text: label }), find, ...rows, more]);
 }
 
 export const FILE_FACETS = [

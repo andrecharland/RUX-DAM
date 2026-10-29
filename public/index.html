@@ -61,57 +61,72 @@
 
   <div class="layout">
     <aside id="side" class="side">
-      <section>
+      <section class="side-sec" data-sec="collections">
         <div class="side-head">
-          <h2>Collections</h2>
+          <button class="sec-toggle" type="button" aria-expanded="true" aria-controls="sec-collections"><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><h2>Collections</h2></button>
           <button id="new-collection" class="link" type="button">+ New</button>
         </div>
-        <ul id="collections" class="tree"></ul>
+        <div id="sec-collections" class="sec-body">
+          <ul id="collections" class="tree"></ul>
+        </div>
       </section>
-      <section>
-        <h2>Folders</h2>
-        <ul id="tree" class="tree"></ul>
-      </section>
-      <section>
+      <section class="side-sec" data-sec="folders">
         <div class="side-head">
-          <h2>Filters</h2>
+          <button class="sec-toggle" type="button" aria-expanded="true" aria-controls="sec-folders"><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><h2>Folders</h2></button>
+        </div>
+        <div id="sec-folders" class="sec-body">
+          <input id="tree-filter" class="side-filter" type="search" placeholder="Find a folder…" aria-label="Find a folder" autocomplete="off">
+          <ul id="tree" class="tree"></ul>
+        </div>
+      </section>
+      <section class="side-sec" data-sec="filters">
+        <div class="side-head">
+          <button class="sec-toggle" type="button" aria-expanded="true" aria-controls="sec-filters"><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><h2>Filters</h2></button>
           <button id="clear-filters" class="link" type="button" hidden>Clear</button>
         </div>
-        <div class="facet">
-          <h3>Rating</h3>
-          <select id="rating" class="date-range" aria-label="Rating">
-            <option value="">Any rating</option>
-            <option value="1">★ and up</option>
-            <option value="2">★★ and up</option>
-            <option value="3">★★★ and up</option>
-            <option value="4">★★★★ and up</option>
-            <option value="5">★★★★★</option>
-          </select>
-        </div>
-        <div id="facets"></div>
-        <div class="side-links">
-          <button id="add-field" class="link" type="button">+ Add a field</button>
-          <button id="edit-values" class="link" type="button">Edit field values</button>
-        </div>
-        <h2 class="subhead">File details</h2>
-        <div class="facet">
-          <h3>Date taken</h3>
-          <select id="date-range" class="date-range" aria-label="Date taken">
-            <option value="">Any date</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="12m">Last 12 months</option>
-            <option value="year">This year</option>
-            <option value="custom">Custom range…</option>
-          </select>
-          <div id="date-custom" class="date-custom" hidden>
-            <input id="date-from" type="date" aria-label="From">
-            <span>to</span>
-            <input id="date-to" type="date" aria-label="To">
+        <div id="sec-filters" class="sec-body">
+          <div class="facet">
+            <h3>Rating</h3>
+            <select id="rating" class="date-range" aria-label="Rating">
+              <option value="">Any rating</option>
+              <option value="1">★ and up</option>
+              <option value="2">★★ and up</option>
+              <option value="3">★★★ and up</option>
+              <option value="4">★★★★ and up</option>
+              <option value="5">★★★★★</option>
+            </select>
           </div>
-          <p class="empty-note small">Uses the date the photo was taken when the camera recorded it, otherwise the date it was added to Drive.</p>
+          <div id="facets"></div>
+          <div class="side-links">
+            <button id="add-field" class="link" type="button">+ Add a field</button>
+            <button id="edit-values" class="link" type="button">Edit field values</button>
+          </div>
         </div>
-        <div id="file-facets"></div>
+      </section>
+      <section class="side-sec" data-sec="details">
+        <div class="side-head">
+          <button class="sec-toggle" type="button" aria-expanded="true" aria-controls="sec-details"><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg><h2>File details</h2></button>
+        </div>
+        <div id="sec-details" class="sec-body">
+          <div class="facet">
+            <h3>Date taken</h3>
+            <select id="date-range" class="date-range" aria-label="Date taken">
+              <option value="">Any date</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="12m">Last 12 months</option>
+              <option value="year">This year</option>
+              <option value="custom">Custom range…</option>
+            </select>
+            <div id="date-custom" class="date-custom" hidden>
+              <input id="date-from" type="date" aria-label="From">
+              <span>to</span>
+              <input id="date-to" type="date" aria-label="To">
+            </div>
+            <p class="empty-note small">Uses the date the photo was taken when the camera recorded it, otherwise the date it was added to Drive.</p>
+          </div>
+          <div id="file-facets"></div>
+        </div>
       </section>
     </aside>
 

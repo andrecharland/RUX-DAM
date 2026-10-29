@@ -21,14 +21,27 @@ export async function loadFolders() {
 }
 
 export function renderTree() {
+  // With text in "Find a folder", only matching folders and the folders above
+  // them show, all expanded.
+  const term = state.treeFilter || '';
+  let visible = null;
+  if (term) {
+    visible = new Set();
+    for (const f of state.folders.values()) {
+      if (!`${displayName(f)} ${f.name}`.toLowerCase().includes(term)) continue;
+      visible.add(f.id);
+      for (const a of f.ancestors) visible.add(a.id);
+    }
+  }
   const children = new Map();
   for (const f of state.folders.values()) {
+    if (visible && !visible.has(f.id)) continue;
     if (!children.has(f.parentId)) children.set(f.parentId, []);
     children.get(f.parentId).push(f);
   }
   const branch = (parentId) => (children.get(parentId) || []).sort(byName).map((f) => {
     const kids = children.get(f.id);
-    const open = state.expanded.has(f.id);
+    const open = Boolean(visible) || state.expanded.has(f.id);
     const hasTags = Object.keys(f.tags).length > 0;
     return el('li', {}, [
       el('div', { class: `node${f.id === state.folder ? ' active' : ''}` }, [
@@ -55,6 +68,7 @@ export function renderTree() {
       ]),
     ])]),
     ...branch(null),
+    visible && !visible.size ? el('li', { class: 'empty-note', text: 'No folder matches.' }) : '',
   );
 }
 

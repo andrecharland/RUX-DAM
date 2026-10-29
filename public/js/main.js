@@ -10,6 +10,7 @@ import { loadFields } from './tags.js';
 import { displayName } from './titles.js';
 import { readUrl, writeUrl } from './url.js';
 import { open, saveRights, setZoom, showVideo, step } from './viewer.js';
+import './sidebar.js';
 
 // Wires up events and starts the app.
 

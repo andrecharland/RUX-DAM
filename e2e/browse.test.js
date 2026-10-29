@@ -94,6 +94,28 @@ describe('browsing and search', { skip: !playwright && 'playwright is not instal
     assert.match(await text('#meta'), /^62 assets/);
   });
 
+  it('folds sidebar sections, finds folders, and narrows long filter lists', async () => {
+    // 13 colors, so the Color filter gets a find box.
+    await fetch(`${app.base}/api/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'], add: { color: [
+        'Red', 'Orange', 'Yellow', 'Green', 'Teal', 'Blue', 'Navy', 'Purple', 'Pink', 'Brown', 'Black', 'White', 'Olive'] } }) });
+    await fresh();
+    await page.click('.side-sec[data-sec="folders"] .sec-toggle');
+    assert.ok(await page.isHidden('#tree'));
+    await page.reload();
+    await page.waitForSelector('#grid .card');
+    assert.ok(await page.isHidden('#tree'), 'remembered');
+    await page.click('.side-sec[data-sec="folders"] .sec-toggle');
+    await page.fill('#tree-filter', 'nested');
+    await page.waitForFunction(() => document.querySelector('#tree').textContent.includes('Nested shoot'));
+    assert.match(await page.textContent('#tree'), /1 - IMAGES/, 'with the folders above it');
+    assert.doesNotMatch(await page.textContent('#tree'), /Sea Otter/);
+    await page.fill('#tree-filter', '');
+    const color = page.locator('.facet:has(h3:text-is("Color"))');
+    await color.locator('.side-filter').fill('pu');
+    assert.deepStrictEqual(await color.locator('label:visible span:first-of-type').allTextContents(), ['Purple']);
+  });
+
   it('jumps to a year and resizes tiles with the slider', async () => {
     await fresh();
     await page.click('#scrubber button:has-text("2024")');
