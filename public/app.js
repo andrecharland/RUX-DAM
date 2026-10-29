@@ -973,21 +973,34 @@ function suggestionBox({ id, s, run, runLabel = 'Suggest tags', title = '✨ Sug
   return el('div', { class: 'suggest' }, parts);
 }
 
+// Claude's suggestions for the open asset take space only while some are left
+// to review (or failed); asking (again) is a link beside the Metadata heading.
 function renderSuggestions(asset) {
   const box = $('d-suggest');
-  if (!asset.suggestions && !state.ai.enabled) return box.replaceChildren();
-  box.replaceChildren(suggestionBox({
-    id: asset.id,
-    s: asset.suggestions,
-    run: async () => {
-      const fresh = await api(`/api/suggest/${asset.id}/run`, {});
-      state.current = fresh;
-      state.items.set(fresh.id, fresh);
-      grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
-      renderSuggestions(fresh);
-      refreshAi();
-    },
-  }));
+  const s = asset.suggestions;
+  const run = async () => {
+    const fresh = await api(`/api/suggest/${asset.id}/run`, {});
+    state.current = fresh;
+    state.items.set(fresh.id, fresh);
+    grid.querySelector(`[data-id="${CSS.escape(fresh.id)}"]`)?.replaceWith(card(fresh));
+    renderSuggestions(fresh);
+    refreshAi();
+  };
+  box.replaceChildren(s && (s.count || s.error) ? suggestionBox({ id: asset.id, s, run }) : '');
+  const ask = $('d-ask');
+  ask.hidden = !state.ai.enabled;
+  ask.disabled = false;
+  ask.textContent = s ? '✨ Ask Claude again' : '✨ Suggest tags';
+  ask.onclick = async () => {
+    ask.disabled = true;
+    ask.textContent = 'Asking Claude…';
+    try {
+      await run();
+    } catch (err) {
+      ask.disabled = false;
+      ask.textContent = err.message;
+    }
+  };
 }
 
 // ---------- titles (RUX naming convention) ----------
@@ -1097,12 +1110,23 @@ window.addEventListener('resize', placeZones);
 
 // ---------- viewer ----------
 
+// The add row stays open from photo to photo once opened, for tagging a run of them.
+const viewerUi = { addOpen: false };
+
 function renderViewerTags(asset) {
-  $('d-tags').replaceChildren(tagEditor({
+  const editor = tagEditor({
     tags: asset.tags,
     apply: applyTo([asset.id]),
     emptyText: 'No metadata yet. Dashed tags come from the folder.',
-  }));
+    collapsible: true,
+    collapsed: !viewerUi.addOpen,
+  });
+  editor.onclose = () => { viewerUi.addOpen = false; };
+  $('d-tags').replaceChildren(editor);
+  $('d-add-tag').onclick = () => {
+    viewerUi.addOpen = true;
+    editor.openAdd();
+  };
 }
 
 function folderLabel(ancestors, i) {
