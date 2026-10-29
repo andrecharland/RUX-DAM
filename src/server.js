@@ -18,6 +18,7 @@ const { googleSignIn } = require('./auth');
 const { VertexEmbedder, EmbeddingIndex } = require('./embeddings');
 const { tagSimilar } = require('./similar');
 const { ThumbCache, snapSize, thumbVersion } = require('./thumbcache');
+const { securityHeaders, sameOrigin, rateLimit, limitRange, inlineSafe, MAX_RESPONSE } = require('./security');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -47,19 +48,6 @@ function basicAuth(password) {
   };
 }
 
-// Cloud Run refuses responses over 32 MB that declare their length, so video
-// playback (which asks for "bytes=0-", the whole file) gets 8 MB pieces; the
-// browser asks for the next piece as it plays or seeks.
-const MAX_RESPONSE = 30 * 1024 * 1024;
-const RANGE_CHUNK = 8 * 1024 * 1024;
-function limitRange(range) {
-  const m = /^bytes=(\d+)-(\d*)$/.exec(range || '');
-  if (!m) return range;
-  const start = Number(m[1]);
-  const end = Math.min(m[2] ? Number(m[2]) : Infinity, start + RANGE_CHUNK - 1);
-  return `bytes=${start}-${end}`;
-}
-
 async function pipeDrive(driveRes, res, passHeaders) {
   res.status(driveRes.status);
   for (const h of passHeaders) {
@@ -82,6 +70,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
 
   // Cloud Run terminates HTTPS in front of the app; trust its forwarded headers.
   app.set('trust proxy', true);
+  app.use(securityHeaders);
   app.get('/healthz', (req, res) => res.send('ok'));
   if (signIn) {
     app.use(signIn.router);
@@ -89,6 +78,11 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
   } else {
     app.use(basicAuth(password));
   }
+  app.use(sameOrigin);
+  // Claude and Vertex AI cost money per call: generous per-person limits stop a
+  // runaway script (or a stolen session) from running up a bill.
+  const claudeLimit = rateLimit({ max: 30, message: 'Too many Claude requests' });
+  const visualLimit = rateLimit({ max: 60 });
   app.get('/api/me', (req, res) => res.json(req.user || null));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -110,7 +104,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
     if (like && library.has(like)) {
       ({ rank, mode: similarMode } = similarTo(like, 200));
       rankMode = 'only';
-    } else if (similarity?.enabled && q.trim().length >= 3) {
+    } else if (similarity?.enabled && q.trim().length >= 3 && visualLimit.check(req)) {
       // Search by description: add photos that look like the words.
       try {
         rank = await similarity.searchText(q, 60);
@@ -304,7 +298,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
     : res.status(503).json({ error: 'Set ANTHROPIC_API_KEY to enable suggestions' }));
 
   // Queue assets: { ids: [...] } or { folder: id }, optionally { force: true } to redo.
-  app.post('/api/suggest', express.json(), needSuggester, (req, res) => {
+  app.post('/api/suggest', express.json(), needSuggester, claudeLimit, (req, res) => {
     const { ids, folder, force } = req.body || {};
     let targets = [];
     if (Array.isArray(ids)) targets = ids.map(String);
@@ -313,6 +307,9 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
     } else {
       return res.status(400).json({ error: 'Pass ids or a known folder' });
     }
+    // Re-asking about photos that already have suggestions is for a few at a
+    // time, not a whole library by accident.
+    if (force && targets.length > 500) return res.status(400).json({ error: 'Ask again for at most 500 photos at a time' });
     // More than 50 photos go to a half-price batch; fewer run right away.
     const { added, batch } = suggester.submit(targets, { force: Boolean(force) });
     res.json({ ...suggester.status(), added, batch });
@@ -324,7 +321,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
   });
 
   // Shoot-level suggestions for a folder, from a few sample photos (one request).
-  app.post('/api/suggest/folder/:id/run', needSuggester, async (req, res) => {
+  app.post('/api/suggest/folder/:id/run', needSuggester, claudeLimit, async (req, res) => {
     if (!library.folders.has(req.params.id)) return res.sendStatus(404);
     try {
       await suggester.runFolder(req.params.id);
@@ -335,7 +332,7 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
   });
 
   // Suggest for one asset right away (from the viewer).
-  app.post('/api/suggest/:id/run', needSuggester, async (req, res) => {
+  app.post('/api/suggest/:id/run', needSuggester, claudeLimit, async (req, res) => {
     const asset = library.byId.get(req.params.id);
     if (!asset) return res.sendStatus(404);
     try {
@@ -426,7 +423,11 @@ function createApp({ library, drive, password, suggester, signIn, similarity, th
       const asset = library.byId.get(req.params.id);
       const driveRes = await drive.media(req.params.id, limitRange(req.get('range')));
       if (!driveRes.ok && driveRes.status !== 206) return res.sendStatus(driveRes.status);
-      const disposition = req.query.download ? 'attachment' : 'inline';
+      // Only raster images and video open in the browser; anything else (an SVG
+      // with a script in it) downloads, and never runs as a page of this site.
+      const type = driveRes.headers.get('content-type');
+      const disposition = req.query.download || !inlineSafe(type) ? 'attachment' : 'inline';
+      res.set('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self'; media-src 'self'");
       // Downloads are named by the asset's RUX_ name, keeping the original extension.
       const label = library.tags.label(asset);
       const ext = /\.[A-Za-z0-9]{1,5}$/.exec(asset.name)?.[0] || '';
@@ -518,6 +519,12 @@ if (require.main === module) {
       console.warn('Google sign-in is on but ALLOWED_DOMAINS and ALLOWED_EMAILS are empty: nobody can sign in.');
     }
   }
+  if (!signIn && !process.env.DAM_PASSWORD && process.env.ALLOW_ANONYMOUS !== '1') {
+    console.error('No access control: set up Google sign-in (GOOGLE_CLIENT_ID) or DAM_PASSWORD, ' +
+      'or set ALLOW_ANONYMOUS=1 to run the DAM open to anyone with the link.');
+    process.exit(1);
+  }
+  if (!signIn && !process.env.DAM_PASSWORD) console.warn('ALLOW_ANONYMOUS=1: the DAM is open to anyone with the link.');
   const app = createApp({ library, drive, suggester, signIn, similarity, thumbs, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));

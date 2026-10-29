@@ -77,8 +77,9 @@ class CurationStore {
     return Object.values(this.data.collections);
   }
 
+  // Own keys only, so an id like "__proto__" or "constructor" is just unknown.
   collection(id) {
-    return this.data.collections[id] || null;
+    return Object.hasOwn(this.data.collections, id) ? this.data.collections[id] : null;
   }
 
   // Collections an asset is in.

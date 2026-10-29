@@ -371,8 +371,26 @@ Keep the Cloud Run service's public access on: the app itself does the sign-in.
 
 ## Development
 ```sh
-npm test   # runs without Google credentials (uses a fake Drive)
+npm test           # unit and API tests; no Google credentials needed (fake Drive)
+npm run test:e2e   # drives the real front end in headless Chromium against a fake Drive,
+                   # Claude and Vertex AI (needs Playwright: npm i -D playwright && npx playwright install chromium;
+                   # skipped when it isn't installed). Makes a short test video with ffmpeg if available.
 ```
+
+## Security
+
+- Access needs Google sign-in or the shared password; the server refuses to start with neither
+  unless `ALLOW_ANONYMOUS=1` is set. Sessions are signed cookies (HttpOnly, SameSite=Lax, Secure),
+  re-checked against the allowed domains and emails on every request.
+- Requests that change anything are refused when they come from another site (CSRF).
+- Pages send a Content-Security-Policy (scripts only from the app; only Google's Drive player may be
+  framed; the app can't be framed), `nosniff`, `X-Frame-Options` and HSTS. API answers aren't cached.
+- The file proxy serves only files in the index; anything but raster images and video (e.g. SVG,
+  which can contain scripts) is downloaded rather than shown.
+- Claude and visual search are rate-limited per person (30 Claude requests and 60 visual searches a
+  minute); asking again for photos that already have suggestions is limited to 500 at a time.
+- File names and text in images are treated as data in Claude's instructions; its suggestions only
+  apply when someone accepts them.
 
 ## Limits (by design, to keep it simple)
 - Read-only: uploads, tags and edits happen in Drive.
