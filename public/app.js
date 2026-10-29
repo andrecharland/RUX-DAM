@@ -619,9 +619,13 @@ async function watchSync() {
   }
 }
 
+// A reset (new search or filter) always runs and supersedes any request still
+// in flight, whose response is then dropped; loading more waits its turn.
+let loadSeq = 0;
 async function load(reset = false) {
-  if (state.loading) return;
+  if (state.loading && !reset) return;
   if (!reset && state.offset >= state.total && state.offset > 0) return;
+  const seq = ++loadSeq;
   state.loading = true;
   if (reset) {
     state.offset = 0;
@@ -633,6 +637,7 @@ async function load(reset = false) {
   }
   try {
     const data = await api(`/api/assets?${queryParams({ offset: state.offset, limit: PAGE })}`);
+    if (seq !== loadSeq) return;
     state.total = data.total;
     state.offset += data.items.length;
     state.months = data.months;
@@ -646,7 +651,7 @@ async function load(reset = false) {
     renderFacets();
     if (reset) renderScrubber();
   } finally {
-    state.loading = false;
+    if (seq === loadSeq) state.loading = false;
   }
 }
 
@@ -1389,11 +1394,20 @@ $('r-save').addEventListener('click', () => {
 });
 $('r-reset').addEventListener('click', () => saveRights('inherit'));
 
+// Searches once typing pauses, or right away on Enter.
 let debounce;
-$('q').addEventListener('input', (e) => {
+function search() {
   clearTimeout(debounce);
-  debounce = setTimeout(() => { state.q = e.target.value; load(true); }, 200);
+  const q = $('q').value.trim();
+  if (q === state.q) return;
+  state.q = q;
+  load(true);
+}
+$('q').addEventListener('input', () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(search, 400);
 });
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 $('kind').addEventListener('change', (e) => { state.kind = e.target.value; load(true); });
 $('rights').addEventListener('change', (e) => { state.rights = e.target.value; load(true); });
 $('suggested').addEventListener('change', (e) => { state.suggested = e.target.value; load(true); });
