@@ -3,8 +3,8 @@
 // The RUX file naming convention (Paid Social Creative Playbook):
 //   RUX_[Product]_[ConceptFamily]_[Format]_[Aspect]_[Creator]_[YYYY-MM-DD]_v01
 // e.g. RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v01
-// Builds labels from plain values ("Gear Box 70L" -> "GearBox70L") and reads
-// names that already follow it. Runs in the browser (window.RuxNaming) and in Node.
+// Builds names and plain-word titles from metadata values ("Gear Box 70L" ->
+// "GearBox70L") and reads names that already follow it. Runs in the browser (window.RuxNaming) and in Node.
 (function (root) {
   const PARTS = [
     { key: 'product', label: 'Product', field: 'product' },
@@ -74,7 +74,36 @@
     return { product: m[1], concept: m[2], format: m[3], aspect: m[4], creator: m[5], date: m[6], version: Number(m[7]) };
   }
 
-  const api = { PARTS, token, productToken, aspectToken, aspectOf, compose, parse };
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const prettyDate = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}, ${d.slice(0, 4)}` : d);
+
+  // A title in plain words and a RUX_ name from naming field values
+  // ({ product: [...], concept: [...], format, aspect, creator, shoot_date, version }).
+  // The title lists every value ("Gear Box 70L + Duffel"); the name uses the first
+  // of each and leaves out any part it can't use. Returns null with no values.
+  function describe(values = {}) {
+    const all = (k) => (values[k] || []).filter(Boolean);
+    const first = (k) => all(k)[0] || '';
+    const title = [
+      all('product').join(' + '),
+      all('concept').join(' + '),
+      [all('format').join(' + '), all('aspect').join(' + ')].filter(Boolean).join(' '),
+      all('creator').length ? `by ${all('creator').join(' & ')}` : '',
+      all('shoot_date').map(prettyDate).join(' + '),
+      first('version') ? `version ${first('version')}` : '',
+    ].filter(Boolean).join(' · ');
+    if (!title) return null;
+    const parts = { product: first('product'), concept: first('concept'), format: first('format'), aspect: first('aspect'),
+      creator: first('creator'), date: first('shoot_date'), version: first('version') };
+    let { name, errors } = compose(parts);
+    if (!name) {
+      for (const k of Object.keys(errors)) delete parts[k];
+      name = compose(parts).name;
+    }
+    return { title, name };
+  }
+
+  const api = { PARTS, token, productToken, aspectToken, aspectOf, compose, parse, describe };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RuxNaming = api;
 })(this);

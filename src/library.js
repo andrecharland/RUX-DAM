@@ -173,7 +173,7 @@ class Library extends EventEmitter {
     return {
       ...asset,
       format: formatOf(asset),
-      label: this.tags.label(asset.id),
+      label: this.tags.label(asset),
       rights: this.rights.resolve(asset),
       tags,
       ownTags: this.tags.own(asset.id),
@@ -223,7 +223,7 @@ class Library extends EventEmitter {
       ...(stats.get(f.id) || empty),
       direct: direct.get(f.id) || { ...empty, date: '' },
       tags: this.tags.own(f.id),
-      label: this.tags.label(f.id),
+      label: this.tags.label(f),
       rights: this.rights.get(f.id),
       restricted: this.rights.resolve(f).status === 'restricted',
       suggestions: this.suggestions.resolve(f.id, this.tags.resolve(f)),
@@ -267,8 +267,9 @@ class Library extends EventEmitter {
       if (terms.length) {
         const values = Object.values(view.tags).flat().map((t) => t.value).join(' ');
         const description = view.suggestions?.description || '';
-        // Folder labels count for everything inside them.
-        const labels = [view.label, ...a.ancestors.map((f) => this.tags.label(f.id))]
+        // RUX_ names (titles are made of tag values, already in `values`); a
+        // folder's counts for everything inside it.
+        const labels = [view.label, ...a.ancestors.map((f) => this.folders.has(f.id) && this.tags.label(this.folders.get(f.id)))]
           .filter(Boolean).map((l) => l.name).join(' ');
         const haystack = (`${a.name} ${a.collection} ${a.path} ${values} ${description} ${labels} ` +
           `${props.format} ${props.year || ''} ${props.camera || ''} ${props.orientation || ''}`).toLowerCase();

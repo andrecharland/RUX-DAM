@@ -143,22 +143,6 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
     }
   });
 
-  // Set a file's or folder's label from its parts ({ parts: {...} }), or remove it ({ remove: true }).
-  app.post('/api/labels/:id', express.json(), async (req, res, next) => {
-    const { id } = req.params;
-    if (!library.has(id) && !library.folders.has(id)) return res.sendStatus(404);
-    try {
-      if (req.body?.remove) {
-        await library.tags.removeLabel(id);
-        return res.json({ label: null });
-      }
-      res.json({ label: await library.tags.setLabel(id, req.body?.parts || {}) });
-    } catch (err) {
-      if (err instanceof RangeError) return res.status(400).json({ error: err.message });
-      next(err);
-    }
-  });
-
   // Replace a field's preset values: { values: [...] }
   app.post('/api/fields/:key/presets', express.json({ limit: '1mb' }), async (req, res, next) => {
     try {
@@ -328,10 +312,10 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
       const driveRes = await drive.media(req.params.id, req.get('range'));
       if (!driveRes.ok && driveRes.status !== 206) return res.sendStatus(driveRes.status);
       const disposition = req.query.download ? 'attachment' : 'inline';
-      // Downloads are named by the asset's label, keeping the original extension.
-      const label = library.tags.label(asset.id);
+      // Downloads are named by the asset's RUX_ name, keeping the original extension.
+      const label = library.tags.label(asset);
       const ext = /\.[A-Za-z0-9]{1,5}$/.exec(asset.name)?.[0] || '';
-      const filename = label ? `${label.name}${ext}` : asset.name;
+      const filename = label?.name ? `${label.name}${ext}` : asset.name;
       res.set('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.set('Cache-Control', 'private, max-age=3600');
       await pipeDrive(driveRes, res, ['content-type', 'content-length', 'content-range', 'accept-ranges']);

@@ -183,7 +183,11 @@ function tagEditor({ tags = {}, apply, bulk = false, emptyText = 'No metadata ye
 
   const select = el('select', { 'aria-label': 'Field' }, state.fields.map((f) => el('option', { value: f.key, text: f.label })));
   const input = el('input', { type: 'text', placeholder: 'Value…', 'aria-label': 'Value', maxlength: 80 });
-  const syncList = () => input.setAttribute('list', `dl-${select.value}`);
+  const syncList = () => {
+    input.setAttribute('list', `dl-${select.value}`);
+    input.type = { shoot_date: 'date', version: 'number' }[select.value] || 'text';
+    if (input.type === 'number') Object.assign(input, { min: 1, max: 999, step: 1 });
+  };
   select.addEventListener('change', syncList);
   syncList();
   const submit = (op) => {
@@ -283,7 +287,7 @@ function renderCrumbs() {
   $('crumbs').replaceChildren(...parts);
 }
 
-// The open folder: its label, its tags (which apply to everything inside), and
+// The open folder: its title, its tags (which apply to everything inside), and
 // Claude's shoot suggestions when there are some to review. Adding tags and
 // asking Claude live behind the two buttons in the header.
 const folderUi = { addOpen: null, open: false };
@@ -305,13 +309,13 @@ function renderFolderPanel({ background = false } = {}) {
   const ownTags = Object.values(folder.tags || {}).flat().length;
   const toReview = folder.suggestions?.count || 0;
   $('ft-summary').replaceChildren(...[
-    folder.label ? labelText(folder.label) : '',
+    folder.label ? folder.label.title : '',
     ownTags ? `${ownTags} tag${ownTags === 1 ? '' : 's'}` : 'no tags',
   ].filter(Boolean).map((t) => el('span', { text: t })),
   toReview ? el('span', { class: 'ai-note', text: `✨ ${toReview} to review` }) : '');
-  $('folder-label').replaceChildren(...labelRow(folder, () => openLabelEditor(folder, {
-    kind: 'folder', tags: folderTags(folder), media: folder.videos > folder.photos ? 'Video' : 'Photo',
-  })));
+  $('folder-label').replaceChildren(...titleRow(folder, () => namingDefaults(folder, {
+    media: folder.videos > folder.photos ? 'Video' : 'Photo', date: folder.direct?.date || folder.from,
+  }), { showTitle: false }));
   // Background refreshes (AI progress) don't redraw the editor under someone typing in it.
   const editorBox = $('folder-editor');
   const typing = editorBox.contains(document.activeElement);
@@ -986,132 +990,63 @@ function renderSuggestions(asset) {
   }));
 }
 
-// ---------- labels (RUX naming convention) ----------
+// ---------- titles (RUX naming convention) ----------
 
-// Labelled items show their label in plain words (downloads still use the RUX_ name).
-const displayName = (item) => (item.label ? labelText(item.label) : item.name);
+// Items with naming fields of their own show a title built from them, e.g.
+// "Gear Box 70L · Proof · Video · by Cal · Jun 8, 2026" (the server builds it,
+// with the RUX_ name used for downloads); others show their Drive name.
+const displayName = (item) => item.label?.title || item.name;
 // Creator(s) from the asset's own or inherited Creator tag.
 const creatorOf = (asset) => (asset.tags?.creator || []).map((t) => t.value).join(', ');
 
-// Effective tags of a folder: inherited from enclosing folders, then its own.
-function folderTags(folder) {
-  const tags = {};
-  for (const f of [...folder.ancestors.map((a) => state.folders.get(a.id)), folder]) {
-    for (const [key, values] of Object.entries(f?.tags || {})) {
-      for (const value of values) (tags[key] ||= []).push({ value });
-    }
-  }
-  return tags;
+// Naming fields worked out from what Drive knows: the Drive name when it already
+// follows the convention, else Photo/Video, the date and (files) the aspect.
+function namingDefaults(item, { media, date, width, height }) {
+  const parsed = RuxNaming.parse(item.name);
+  const fromVocab = (key, written, toToken) => state.fields.find((f) => f.key === key)?.values
+    .find((v) => toToken(v) === written) || written;
+  const values = parsed ? {
+    product: fromVocab('product', parsed.product, RuxNaming.productToken),
+    concept: fromVocab('concept', parsed.concept, RuxNaming.token),
+    format: fromVocab('format', parsed.format, RuxNaming.token),
+    aspect: parsed.aspect,
+    creator: fromVocab('creator', parsed.creator, RuxNaming.token),
+    shoot_date: parsed.date,
+    version: String(parsed.version),
+  } : { format: media, shoot_date: (date || '').slice(0, 10), aspect: RuxNaming.aspectOf(width, height) };
+  return Object.fromEntries(Object.entries(values).filter(([, v]) => v).map(([k, v]) => [k, [v]]));
 }
 
-// The label line under a name: the label (or "No label") and an edit button.
-// `showName: false` when the label is already the heading above it.
-// A label's parts in plain words, e.g. "Gear Box 70L · Proof · Reels 9x16 · by Cal · Jun 8, 2026 · version 1".
-function labelText(label) {
-  const p = label?.parts;
-  if (!p) return label?.name || '';
-  const date = p.date ? new Date(`${p.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  return [p.product, p.concept, [p.format, p.aspect].filter(Boolean).join(' '), p.creator && `by ${p.creator}`, date,
-    p.version && `version ${p.version}`].filter(Boolean).join(' · ');
-}
-
-function labelRow(item, onEdit, { showName = true } = {}) {
-  return item.label
-    ? [
-      showName ? el('span', { class: 'label-plain', text: labelText(item.label) }) : '',
-      el('code', { text: item.label.name, title: 'Label (RUX naming convention)' }),
-      el('button', { type: 'button', class: 'link', text: 'Edit label', onclick: onEdit }),
+// The line under a heading: the RUX_ name and Drive name of a titled item, or a
+// way to start one.
+function titleRow(item, defaults, { showTitle = true } = {}) {
+  if (item.label) {
+    return [
+      showTitle ? el('span', { class: 'label-plain', text: item.label.title }) : '',
+      item.label.name ? el('code', { text: item.label.name, title: 'File name in the RUX naming convention' }) : '',
       el('span', { class: 'drive-name', text: `Drive name: ${item.name}` }),
-    ]
-    : [
-      el('span', { class: 'hint', text: 'No label yet. A label names this with the RUX naming convention.' }),
-      el('button', { type: 'button', class: 'link', text: 'Add label', onclick: onEdit }),
     ];
+  }
+  return [
+    el('span', { class: 'hint', text: 'Add Product, Format, Shoot date… to give this a title and a RUX file name.' }),
+    el('button', { type: 'button', class: 'link', text: 'Start from file details', onclick: async (e) => {
+      e.target.disabled = true;
+      try {
+        await applyTo([item.id])({ add: defaults() });
+      } catch (err) {
+        e.target.textContent = err.message;
+      }
+    } }),
+  ];
 }
 
 function renderViewerLabel(asset) {
   $('d-name').textContent = displayName(asset);
-  $('d-label').replaceChildren(...labelRow(asset, () => openLabelEditor(asset, {
-    kind: 'file', tags: asset.tags, width: asset.width, height: asset.height, date: asset.takenTime || asset.createdTime,
-    media: asset.kind === 'video' ? 'Video' : 'Photo',
-  }), { showName: false }));
+  $('d-label').replaceChildren(...titleRow(asset, () => namingDefaults(asset, {
+    media: asset.kind === 'video' ? 'Video' : 'Photo', date: asset.takenTime || asset.createdTime,
+    width: asset.width, height: asset.height,
+  }), { showTitle: false }));
 }
-
-const LABEL_INPUTS = ['product', 'concept', 'format', 'aspect', 'creator', 'date', 'version'];
-const labelEdit = { item: null };
-
-// Starting values: the current label; else the Drive name if it already follows
-// the convention; else the item's tags, its pixel aspect and its date.
-function labelDefaults(item, { tags = {}, width, height, date, media } = {}) {
-  if (item.label) return { ...item.label.parts };
-  const parsed = RuxNaming.parse(item.name);
-  const fromVocab = (key, written, toToken) => state.fields.find((f) => f.key === key)?.values
-    .find((v) => toToken(v) === written) || written;
-  if (parsed) {
-    return {
-      ...parsed,
-      product: fromVocab('product', parsed.product, RuxNaming.productToken),
-      concept: fromVocab('concept', parsed.concept, RuxNaming.token),
-      format: fromVocab('format', parsed.format, RuxNaming.token),
-      creator: fromVocab('creator', parsed.creator, RuxNaming.token),
-    };
-  }
-  const first = (key) => tags[key]?.[0]?.value || '';
-  return {
-    product: first('product'),
-    concept: first('concept'),
-    format: first('format') || media || '',
-    aspect: first('aspect') || RuxNaming.aspectOf(width, height),
-    creator: first('creator'),
-    date: (date || new Date().toISOString()).slice(0, 10),
-    version: 1,
-  };
-}
-
-function updateLabelPreview() {
-  const parts = Object.fromEntries(LABEL_INPUTS.map((k) => [k, $(`lb-${k}`).value]));
-  const { name, errors } = RuxNaming.compose(parts);
-  $('lb-preview').textContent = name || 'RUX_…';
-  $('lb-msg').textContent = name ? '' : Object.values(errors)[0];
-  $('lb-save').disabled = !name;
-  return parts;
-}
-
-function openLabelEditor(item, context) {
-  labelEdit.item = item;
-  const values = labelDefaults(item, context);
-  for (const k of LABEL_INPUTS) $(`lb-${k}`).value = values[k] ?? '';
-  $('lb-for').textContent = `${context.kind === 'folder' ? 'Folder' : 'File'} in Drive: ${item.name}. ` +
-    'The label is shown in place of the Drive name and nothing in Drive changes. Every part is optional; ' +
-    'the ones you fill in are added as tags' + (context.kind === 'folder' ? ', so everything in the folder gets them.' : '.');
-  $('lb-remove').hidden = !item.label;
-  updateLabelPreview();
-  $('label-dialog').showModal();
-}
-
-for (const k of LABEL_INPUTS) $(`lb-${k}`).addEventListener('input', updateLabelPreview);
-for (const id of ['lb-close', 'lb-cancel']) $(id).addEventListener('click', () => $('label-dialog').close());
-// Save label is the form's submit button, so Enter in any field saves too.
-$('lb-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if ($('lb-save').disabled) return;
-  try {
-    await api(`/api/labels/${encodeURIComponent(labelEdit.item.id)}`, { parts: updateLabelPreview() });
-    $('label-dialog').close();
-    await afterEdit();
-  } catch (err) {
-    $('lb-msg').textContent = err.message;
-  }
-});
-$('lb-remove').addEventListener('click', async () => {
-  try {
-    await api(`/api/labels/${encodeURIComponent(labelEdit.item.id)}`, { remove: true });
-    $('label-dialog').close();
-    await afterEdit();
-  } catch (err) {
-    $('lb-msg').textContent = err.message;
-  }
-});
 
 // ---------- platform readiness ----------
 

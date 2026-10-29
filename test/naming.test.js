@@ -36,7 +36,7 @@ test('reads names that follow the convention, and aspects from pixels', () => {
   assert.strictEqual(naming.aspectOf(1000, 700), '');
 });
 
-test('labels on folders and files: name, tags, search, downloads', async () => {
+test('titles and RUX names come from naming fields: folders, files, search, downloads', async () => {
   const root = { id: 'root', name: 'Brand' };
   const shoot = { id: 'fShoot', name: 'Cal reels june' };
   const drive = {
@@ -53,61 +53,66 @@ test('labels on folders and files: name, tags, search, downloads', async () => {
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const get = async (url) => (await fetch(base + url)).json();
+  const folder = async () => (await get('/api/folders')).find((f) => f.id === 'fShoot');
   try {
-    const parts = { product: 'Gear Box 70L', concept: 'Proof', format: 'Reels', aspect: '9x16', creator: 'Cal', date: '2026-06-08', version: 1 };
-    const res = await (await post('/api/labels/fShoot', { parts })).json();
-    assert.strictEqual(res.label.name, 'RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v01');
+    await post('/api/tags', { ids: ['fShoot'], add: {
+      product: ['Gear Box 70L'], concept: ['Proof'], format: ['Video'], aspect: ['9:16'], creator: ['Cal'],
+      shoot_date: ['2026-06-08'], version: ['v1'],
+    } });
+    assert.deepStrictEqual((await folder()).label, {
+      title: 'Gear Box 70L · Proof · Video 9x16 · by Cal · Jun 8, 2026 · version 1',
+      name: 'RUX_GearBox70L_Proof_Video_9x16_Cal_2026-06-08_v01',
+    });
+    assert.deepStrictEqual((await folder()).tags.version, ['1'], 'versions stored as plain numbers');
 
-    const folder = (await get('/api/folders')).find((f) => f.id === 'fShoot');
-    assert.strictEqual(folder.label.name, res.label.name);
-    assert.deepStrictEqual(folder.tags, { product: ['Gear Box 70L'], concept: ['Proof'], format: ['Reels'], aspect: ['9x16'], creator: ['Cal'] });
+    // Files inherit the fields but keep their Drive name until they have naming fields of their own.
+    let asset = await get('/api/assets/v1');
+    assert.strictEqual(asset.label, null);
+    assert.strictEqual(asset.tags.format[0].value, 'Video');
+    assert.deepStrictEqual((await get('/api/assets?q=GearBox70L_Proof')).items.map((a) => a.id), ['v1'], 'search matches the folder name');
 
-    // The file inherits the folder's label parts as tags and is found by the label.
-    const asset = await get('/api/assets/v1');
-    assert.strictEqual(asset.tags.format[0].value, 'Reels');
-    assert.deepStrictEqual((await get('/api/assets?q=GearBox70L_Proof')).items.map((a) => a.id), ['v1']);
-    assert.strictEqual((await get('/api/assets?tag=concept:proof&tag=aspect:9x16')).total, 1);
-
-    // Relabelling replaces the old label's tags instead of piling them up.
-    await post('/api/labels/fShoot', { parts: { ...parts, format: 'Feed Video', aspect: '4:5', version: 2 } });
-    const relabelled = (await get('/api/folders')).find((f) => f.id === 'fShoot');
-    assert.strictEqual(relabelled.label.name, 'RUX_GearBox70L_Proof_FeedVideo_4x5_Cal_2026-06-08_v02');
-    assert.deepStrictEqual(relabelled.tags.format, ['Feed Video']);
-    assert.deepStrictEqual(relabelled.tags.aspect, ['4x5']);
-
-    // Parts left empty are left out of the name, and drop the tags they had added.
-    await post('/api/labels/fShoot', { parts: { product: 'Gear Box 70L', format: 'Video', date: '', version: '' } });
-    const partial = (await get('/api/folders')).find((f) => f.id === 'fShoot');
-    assert.strictEqual(partial.label.name, 'RUX_GearBox70L_Video');
-    assert.deepStrictEqual(partial.tags, { product: ['Gear Box 70L'], format: ['Video'] });
-
-    // A file label names its download; the extension is kept.
-    await post('/api/labels/v1', { parts: { ...parts, version: 3 } });
+    // A file's own Version gives it a title with the shoot's fields, and names its download.
+    await post('/api/tags', { ids: ['v1'], add: { version: ['3'] } });
+    asset = await get('/api/assets/v1');
+    assert.strictEqual(asset.label.name, 'RUX_GearBox70L_Proof_Video_9x16_Cal_2026-06-08_v03');
     const dl = await fetch(`${base}/api/assets/v1/file?download=1`);
-    assert.match(dl.headers.get('content-disposition'), /filename\*=UTF-8''RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v03\.mp4$/);
+    assert.match(dl.headers.get('content-disposition'), /filename\*=UTF-8''RUX_GearBox70L_Proof_Video_9x16_Cal_2026-06-08_v03\.mp4$/);
 
-    const invalid = await post('/api/labels/v1', { parts: { ...parts, date: 'June 8' } });
+    // Several values: the title lists them, the name uses the first. Changing a tag changes both.
+    await post('/api/tags', { ids: ['fShoot'], add: { product: ['Duffel'] }, remove: { concept: ['Proof'] } });
+    assert.deepStrictEqual((await folder()).label, {
+      title: 'Gear Box 70L + Duffel · Video 9x16 · by Cal · Jun 8, 2026 · version 1',
+      name: 'RUX_GearBox70L_Video_9x16_Cal_2026-06-08_v01',
+    });
+
+    const invalid = await post('/api/tags', { ids: ['fShoot'], add: { shoot_date: ['someday'] } });
     assert.strictEqual(invalid.status, 400);
     assert.match((await invalid.json()).error, /date/i);
-    assert.strictEqual((await post('/api/labels/nope', { parts })).status, 404);
 
-    await post('/api/labels/v1', { remove: true });
-    const unlabelled = await get('/api/assets/v1');
-    assert.strictEqual(unlabelled.label, null);
-    assert.deepStrictEqual(unlabelled.ownTags.format, ['Reels'], 'removing a label keeps its tags');
+    await post('/api/tags', { ids: ['fShoot'], remove: { product: ['Gear Box 70L', 'Duffel'], format: ['Video'], aspect: ['9x16'],
+      creator: ['Cal'], shoot_date: ['2026-06-08'], version: ['1'] } });
+    assert.strictEqual((await folder()).label, null, 'no naming fields, no title');
   } finally {
     server.close();
   }
 });
 
-test('tag files saved before the playbook fields get them on load', async () => {
+test('tag files saved before the playbook fields get them on load; old labels move into fields', async () => {
   const tags = new TagStore({ log: quiet });
   tags.store.load = async () => {
-    tags.store.data = { fields: [{ key: 'product', label: 'Product', suggest: ['RUX 70L Core'] }], tags: {} };
+    tags.store.data = {
+      fields: [{ key: 'product', label: 'Product', suggest: ['RUX 70L Core'] }, { key: 'format', label: 'Format', suggest: ['Carousel', 'Feed Video', 'Reels', 'Static'] }],
+      tags: { x: { product: ['70L Core'] } },
+      labels: { x: { name: 'RUX_70LCore_2026-06-08_v02', parts: { product: '70L Core', date: '2026-06-08', version: 2 } } },
+    };
   };
   await tags.load();
   const keys = tags.fields().map((f) => f.key);
-  for (const k of ['concept', 'format', 'aspect', 'creator']) assert.ok(keys.includes(k), k);
+  for (const k of ['concept', 'format', 'aspect', 'creator', 'shoot_date', 'version']) assert.ok(keys.includes(k), k);
   assert.deepStrictEqual(tags.fields().find((f) => f.key === 'product').presets, ['RUX 70L Core'], 'existing fields kept');
-  assert.strictEqual(tags.label('x'), null, 'no labels key yet is fine');
+  assert.deepStrictEqual(tags.fields().find((f) => f.key === 'format').presets, ['Photo', 'Video'], 'old format presets replaced');
+  assert.deepStrictEqual(tags.own('x'), { product: ['70L Core'], shoot_date: ['2026-06-08'], version: ['2'] });
+  assert.strictEqual(tags.label({ id: 'x', ancestors: [] }).name, 'RUX_70LCore_2026-06-08_v02');
+  assert.strictEqual(tags.data.labels, undefined);
+  assert.strictEqual(tags.label({ id: 'y', ancestors: [] }), null);
 });

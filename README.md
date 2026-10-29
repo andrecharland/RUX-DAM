@@ -197,33 +197,31 @@ this asset** (in the viewer) copy it, e.g.
 `…/?tag=product:Duffel&tag=season:Winter&rights=cleared` opens straight to cleared Duffel
 photos tagged Winter. People opening the link need the app's password, if one is set.
 
-## Labels (RUX naming convention)
+## Titles and RUX file names
 
-Any folder or file can get a label in the naming convention from the RUX Paid Social Creative
-Playbook:
+Titles come from metadata. The naming fields, Product, Concept family, Format (Photo or Video),
+Aspect, Creator, Shoot date and Version, make up the RUX Paid Social Creative Playbook convention:
 
 `RUX_[Product]_[ConceptFamily]_[Format]_[Aspect]_[Creator]_[YYYY-MM-DD]_v01`
-e.g. `RUX_GearBox70L_Proof_Reels_9x16_Cal_2026-06-08_v01`
+e.g. `RUX_GearBox70L_Proof_Video_9x16_Cal_2026-06-08_v01`
 
-Click **Add label** in a folder's details or under a file's name in the viewer. Every part is
-optional: the name keeps the parts filled in, in order (e.g. `RUX_GearBox70L_Photo_2026-06-08`).
-Each part has suggestions (Concept family: Product-in-Context, System/Stack, Proof,
-Lifestyle/Emotional, Social Proof; Format: Photo or Video; Aspect: 9x16, 4x5, 1x1, 1.91x1, 16x9, 4x1;
-change them under **Edit field values**), and the name is built as you type: spaces and punctuation
-are removed and words capitalized ("Gear Box 70L" becomes `GearBox70L`, a leading "RUX" is dropped
-from products, "9:16" becomes `9x16`).
+A folder or file with any naming field of its own gets:
 
-- The label is shown in plain words in place of the Drive name (folder tree, breadcrumbs, cards,
-  viewer), e.g. "Gear Box 70L · Proof · Reels 9x16 · by Cal · Jun 8, 2026 · version 1", with the
-  `RUX_…` name and the Drive name in the details; nothing in Drive is renamed. Search matches labels.
-- The parts are also added as tags (Product, Concept family, Format, Aspect, Creator), so they can be
-  filtered, and a folder's label parts apply to everything inside it. Editing a label replaces the
-  tags its previous version added; removing a label keeps its tags.
-- Downloads of a labelled file use the label as the file name, with the original extension.
-- The editor pre-fills from the Drive name when it already follows the convention, otherwise from
-  the item's tags, the aspect of its pixel size and its date.
+- a **title** in plain words, shown in place of the Drive name (folder tree, breadcrumbs, cards,
+  viewer), e.g. "Gear Box 70L · Proof · Video 9x16 · by Cal · Jun 8, 2026 · version 1"; several values
+  are all listed ("Gear Box 70L + Duffel");
+- a **RUX_ name**, shown in its details and used as the download file name (original extension
+  kept). It uses the first value of each field, leaves out empty ones, and is built as you'd expect:
+  "Gear Box 70L" becomes `GearBox70L`, a leading "RUX" is dropped from products, "9:16" becomes `9x16`.
 
-Labels are stored in `tags.json`.
+Every field is optional. Each field uses the item's own values, else the ones inherited from its
+folders: files in a named shoot keep their Drive file name, while a final edit given its own
+Version gets a title with the shoot's Product and its own version. Change a tag and the title and
+name change with it; nothing in Drive is renamed. **Start from file details** fills in Format, Shoot
+date and (for files) Aspect from Drive, or every part when the Drive name already follows the
+convention. Shoot dates are stored as YYYY-MM-DD and versions as plain numbers ("v2" becomes 2).
+
+Labels saved by earlier versions were moved into these fields on first load.
 
 ## Platform readiness
 

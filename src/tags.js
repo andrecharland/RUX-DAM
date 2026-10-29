@@ -13,18 +13,37 @@ const DEFAULT_FIELDS = [
   { key: 'location', label: 'Location' },
   { key: 'people', label: 'People' },
   { key: 'tags', label: 'Tags' },
-  // From the RUX Paid Social Creative Playbook (also the parts of a label).
+  // From the RUX Paid Social Creative Playbook; with Shoot date and Version they
+  // make up an item's title and RUX_ file name.
   { key: 'concept', label: 'Concept family', suggest: ['Product-in-Context', 'System/Stack', 'Proof', 'Lifestyle/Emotional', 'Social Proof'] },
   { key: 'format', label: 'Format', suggest: ['Photo', 'Video'] },
   { key: 'aspect', label: 'Aspect', suggest: ['9x16', '4x5', '1x1', '1.91x1', '16x9', '4x1'] },
   { key: 'creator', label: 'Creator' },
+  { key: 'shoot_date', label: 'Shoot date' },
+  { key: 'version', label: 'Version' },
   // Product line season the asset belongs to (not the weather in the photo; that's Season).
   { key: 'collection', label: 'Collection season',
     suggest: ['Spring/Summer 26', 'Fall/Winter 26', 'Spring/Summer 27', 'Fall/Winter 27'] },
 ];
 
-// Label parts that are also tag fields.
-const LABEL_FIELDS = ['product', 'concept', 'format', 'aspect', 'creator'];
+// Fields that make up a title and RUX_ name, in naming order.
+const NAME_FIELDS = ['product', 'concept', 'format', 'aspect', 'creator', 'shoot_date', 'version'];
+
+// Shoot dates are stored as YYYY-MM-DD, versions as a plain number, aspects as 9x16.
+function normalize(key, value) {
+  if (key === 'shoot_date') {
+    const t = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : Date.parse(`${value} 12:00 UTC`);
+    if (Number.isNaN(t)) throw new RangeError('Shoot date must be a date, e.g. 2026-06-08');
+    return new Date(t).toISOString().slice(0, 10);
+  }
+  if (key === 'version') {
+    const n = Number(value.replace(/^v/i, ''));
+    if (!Number.isInteger(n) || n < 1 || n > 999) throw new RangeError('Version must be a whole number from 1 to 999');
+    return String(n);
+  }
+  if (key === 'aspect') return naming.aspectToken(value) || value;
+  return value;
+}
 
 const MAX_VALUE = 80;
 const MAX_VALUES = 50;
@@ -34,15 +53,14 @@ function slugify(label) {
 }
 
 // Metadata fields and the values set on Drive files and folders, stored as tags.json:
-//   { fields: [{ key, label, suggest? }], tags: { [id]: { [fieldKey]: [value, …] } },
-//     labels: { [id]: { name, parts, updatedAt } } }
-// Values set on a folder apply to everything inside it. A label is a name in the
-// RUX naming convention, shown in place of the Drive name; its parts are tags too.
+//   { fields: [{ key, label, suggest? }], tags: { [id]: { [fieldKey]: [value, …] } } }
+// Values set on a folder apply to everything inside it. An item with naming fields
+// of its own (Product, Format, Shoot date…) gets a title and a RUX_ name from them.
 class TagStore {
   constructor({ auth, bucket, object = 'tags.json', log = console } = {}) {
     this.store = new JsonStore({
       auth, bucket, object, log,
-      empty: () => ({ fields: DEFAULT_FIELDS.map((f) => ({ ...f })), tags: {}, labels: {} }),
+      empty: () => ({ fields: DEFAULT_FIELDS.map((f) => ({ ...f })), tags: {} }),
     });
   }
 
@@ -65,6 +83,14 @@ class TagStore {
     // untouched old presets are replaced, never a list someone edited.
     const format = this.data.fields.find((f) => f.key === 'format');
     if (format && String(format.suggest) === 'Carousel,Feed Video,Reels,Static') format.suggest = ['Photo', 'Video'];
+    // Labels used to be stored apart from tags; their other parts already are
+    // tags, so only the date and version move over. Saved with the next change.
+    for (const [id, l] of Object.entries(this.data.labels || {})) {
+      const t = (this.data.tags[id] ||= {});
+      if (l.parts?.date && !t.shoot_date?.length) t.shoot_date = [l.parts.date];
+      if (l.parts?.version && !t.version?.length) t.version = [String(l.parts.version)];
+    }
+    delete this.data.labels;
   }
 
   fieldKeys() {
@@ -144,7 +170,8 @@ class TagStore {
       }
       return out;
     };
-    return changes.map(({ id, add, remove }) => ({ id, add: values(add), remove: values(remove) }));
+    const normalized = (obj) => Object.fromEntries(Object.entries(obj).map(([k, list]) => [k, list.map((v) => normalize(k, v))]));
+    return changes.map(({ id, add, remove }) => ({ id, add: normalized(values(add)), remove: values(remove) }));
   }
 
   mutate(data, changes) {
@@ -176,41 +203,16 @@ class TagStore {
     }
   }
 
-  label(id) {
-    return this.data.labels?.[id] || null;
-  }
-
-  // Sets a file's or folder's label from its parts ({ product, concept, format,
-  // aspect, creator, date, version }). The parts are also added as tags,
-  // replacing the ones a previous label added.
-  async setLabel(id, parts = {}) {
-    const { name, errors } = naming.compose(parts);
-    if (!name) throw new RangeError(Object.values(errors)[0]);
-    const clean = {
-      ...Object.fromEntries(LABEL_FIELDS.map((k) => [k, String(parts[k] ?? '').trim().slice(0, MAX_VALUE)])),
-      aspect: naming.aspectToken(parts.aspect),
-      date: String(parts.date || '').trim(),
-      version: String(parts.version ?? '').trim() ? Number(parts.version) : null,
-    };
-    const updatedAt = new Date().toISOString();
-    await this.store.update((data) => {
-      data.labels ||= {};
-      const old = data.labels[id]?.parts || {};
-      const add = {};
-      const remove = {};
-      for (const k of LABEL_FIELDS) {
-        if (clean[k]) add[k] = [clean[k]];
-        if (old[k] && old[k].toLowerCase() !== clean[k].toLowerCase()) remove[k] = [old[k]];
-      }
-      this.mutate(data, this.clean([{ id, add, remove }]));
-      data.labels[id] = { name, parts: clean, updatedAt };
-    });
-    return this.label(id);
-  }
-
-  // Removes the label; its tags stay.
-  async removeLabel(id) {
-    await this.store.update((data) => { if (data.labels) delete data.labels[id]; });
+  // { title, name } for a file or folder ({ id, ancestors }) with naming fields
+  // of its own; null otherwise. Each field uses the item's own values, else the
+  // inherited ones, so a final edit with its own Version 3 keeps the shoot's
+  // Product but not its Version 1.
+  label(item) {
+    const own = this.data.tags[item.id] || {};
+    if (!NAME_FIELDS.some((k) => own[k]?.length)) return null;
+    const tags = this.resolve(item);
+    return naming.describe(Object.fromEntries(NAME_FIELDS.map((k) => [k,
+      own[k]?.length ? own[k] : (tags[k] || []).map((t) => t.value)])));
   }
 
   // Effective metadata for an asset: values from every enclosing folder plus
@@ -234,4 +236,4 @@ class TagStore {
   }
 }
 
-module.exports = { TagStore, DEFAULT_FIELDS, LABEL_FIELDS };
+module.exports = { TagStore, DEFAULT_FIELDS, NAME_FIELDS };
