@@ -26,6 +26,26 @@ function formatBytes(n) {
   return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
 }
 
+// ---------- previews ----------
+
+// Preview sizes the server keeps (longest side, px); requests round up to one,
+// so the same image is reused across the grid, cards and viewer. The version
+// (from the file's modified time) lets the browser keep a preview for good.
+const PREVIEW_SIZES = [256, 512, 1024, 2048];
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const thumbUrl = (a, px) => `/api/assets/${encodeURIComponent(a.id)}/thumbnail` +
+  `?size=${PREVIEW_SIZES.find((s) => s >= px) || 2048}&v=${(Date.parse(a.modifiedTime) || 0).toString(36)}`;
+const aspectOf = (a) => (a.width && a.height ? Math.min(Math.max(a.width / a.height, 0.4), 3) : 1);
+// Longest side, in device pixels, of an image cropped to fill a box (w x h css px).
+const fillPx = (a, w, h) => {
+  const ar = a.width && a.height ? a.width / a.height : 1;
+  return Math.max(w, h * ar, h, w / ar) * DPR;
+};
+// A grid tile is the row height tall and grows up to ~25% wider to fill its row.
+const rowHeight = () => Number($('size').value) || 200;
+const tileUrl = (a) => thumbUrl(a, fillPx(a, rowHeight() * aspectOf(a) * 1.25, rowHeight()));
+const viewerUrl = (a) => thumbUrl(a, 2048);
+
 function formatDuration(ms) {
   if (!ms) return '';
   const s = Math.round(ms / 1000);
@@ -408,7 +428,7 @@ const runShootSuggestions = (folder) => async () => {
 
 // One tile: its width follows the photo's shape (--ar), its height the size slider.
 function card(asset) {
-  const ar = asset.width && asset.height ? Math.min(Math.max(asset.width / asset.height, 0.4), 3) : 1;
+  const ar = aspectOf(asset);
   const restricted = asset.rights.status === 'restricted';
   const selected = state.selected.has(asset.id);
   const values = Object.values(asset.tags).flat().map((t) => t.value);
@@ -420,7 +440,7 @@ function card(asset) {
   }, [
     el('input', { type: 'checkbox', class: 'pick', 'aria-label': `Select ${displayName(asset)}`, checked: selected }),
     asset.hasThumbnail
-      ? el('img', { src: `/api/assets/${asset.id}/thumbnail?size=600`, loading: 'lazy', alt: '' })
+      ? el('img', { src: tileUrl(asset), loading: 'lazy', decoding: 'async', alt: '' })
       : el('div', { class: 'noprev', text: asset.kind === 'video' ? '▶ Video' : 'No preview' }),
     restricted ? el('span', { class: 'flag', text: 'Do not use' }) : '',
     asset.kind === 'video' ? el('span', { class: 'badge', text: `▶ ${formatDuration(asset.durationMs)}`.trim() }) : '',
@@ -592,7 +612,7 @@ function dateSpan(from, to) {
 
 function folderCard(f, { where } = {}) {
   const covers = [0, 1, 2].map((i) => el('div', {}, f.covers?.[i]
-    ? [el('img', { src: `/api/assets/${f.covers[i]}/thumbnail?size=${i ? 300 : 600}`, alt: '', loading: 'lazy' })] : []));
+    ? [el('img', { src: thumbUrl(f.covers[i], (i ? 120 : 260) * DPR), alt: '', loading: 'lazy', decoding: 'async' })] : []));
   const meta = [dateSpan(f.from, f.to), f.photos ? plural(f.photos, 'photo') : '', f.videos ? plural(f.videos, 'video') : '']
     .filter(Boolean).join(' · ');
   const tagValues = Object.values(f.tags || {}).flat().slice(0, 3);
@@ -1350,13 +1370,26 @@ function open(asset) {
   // Photos show Drive's large preview (a JPG), which works for formats browsers
   // can't display (HEIC, RAW, TIFF, PSD) and loads faster than the original.
   // If there's no preview, fall back to the original file.
-  const preview = asset.hasThumbnail ? `/api/assets/${asset.id}/thumbnail?size=2048` : null;
-  const image = el('img', { src: preview || fileUrl, alt: asset.name });
+  const preview = asset.hasThumbnail ? viewerUrl(asset) : null;
+  // Shows the grid's preview (already loaded) straight away, then the sharp one.
+  const image = el('img', { src: preview ? tileUrl(asset) : fileUrl, alt: asset.name, class: preview ? 'soft' : '' });
   image.addEventListener('error', () => { if (image.getAttribute('src') !== fileUrl) image.src = fileUrl; });
+  if (preview) {
+    const sharp = new Image();
+    sharp.onload = () => {
+      if (state.current?.id !== asset.id) return;
+      image.src = preview;
+      image.classList.remove('soft');
+      if (state.zoom) setZoom(state.zoom);
+    };
+    sharp.onerror = () => { if (state.current?.id === asset.id) image.src = fileUrl; };
+    sharp.src = preview;
+  }
   const media = asset.kind === 'video'
     ? el('video', { src: fileUrl, controls: true, autoplay: true, playsinline: true, poster: preview })
     : image;
   $('stage').replaceChildren(media);
+  prefetchNeighbors(asset);
   renderViewerLabel(asset);
   renderCurate(asset);
   const rows = [
@@ -1390,6 +1423,16 @@ function open(asset) {
 const itemList = () => [...state.items.values()];
 const viewerIndex = () => itemList().findIndex((a) => a.id === state.current?.id);
 
+// Loads the large previews either side of the open asset, so ← → is instant.
+function prefetchNeighbors(asset) {
+  const list = itemList();
+  const i = list.findIndex((a) => a.id === asset.id);
+  if (i < 0) return;
+  for (const a of [list[i + 1], list[i - 1], list[i + 2]]) {
+    if (a?.hasThumbnail && a.kind !== 'video') new Image().src = viewerUrl(a);
+  }
+}
+
 // Moves through the current results, loading the next page at the end.
 async function step(delta) {
   let list = itemList();
@@ -1415,7 +1458,7 @@ function renderNav() {
       type: 'button', class: a.id === state.current.id ? 'current' : '', style: `width: ${Math.round(52 * ar)}px`,
       'aria-label': `Show ${displayName(a)}`, 'aria-current': a.id === state.current.id ? 'true' : false,
       onclick: () => open(a),
-    }, [a.hasThumbnail ? el('img', { src: `/api/assets/${a.id}/thumbnail?size=200`, alt: '', loading: 'lazy' }) : '']);
+    }, [a.hasThumbnail ? el('img', { src: thumbUrl(a, 52 * ar * DPR), alt: '', loading: 'lazy', decoding: 'async' }) : '']);
   }));
   $('filmstrip').querySelector('.current')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
@@ -1444,7 +1487,7 @@ function setZoom(level) {
 
 const relatedThumbs = (list) => (list.length
   ? list.map((a) => el('button', { type: 'button', title: displayName(a), 'aria-label': `Open ${displayName(a)}`, onclick: () => open(a) },
-    [a.hasThumbnail ? el('img', { src: `/api/assets/${a.id}/thumbnail?size=300`, alt: '', loading: 'lazy' }) : '']))
+    [a.hasThumbnail ? el('img', { src: thumbUrl(a, fillPx(a, 120, 120)), alt: '', loading: 'lazy', decoding: 'async' }) : '']))
   : [el('p', { class: 'empty-note', text: 'Nothing else yet.' })]);
 
 // "More from this shoot" (same folder) and "More like this" (visual or tag similarity).
@@ -1574,6 +1617,15 @@ $('d-like-all').addEventListener('click', () => {
   $('size').addEventListener('input', (e) => {
     apply(e.target.value);
     try { localStorage.setItem(KEY, e.target.value); } catch { /* storage unavailable */ }
+  });
+  // When tiles get bigger, swap in larger previews where they're now needed.
+  const sizeOf = (url) => Number(new URL(url, location.href).searchParams.get('size')) || 0;
+  $('size').addEventListener('change', () => {
+    for (const img of grid.querySelectorAll('.card img')) {
+      const asset = state.items.get(img.closest('.card').dataset.id);
+      const url = asset && tileUrl(asset);
+      if (url && sizeOf(url) > sizeOf(img.src)) img.src = url;
+    }
   });
 }
 viewer.addEventListener('close', () => {

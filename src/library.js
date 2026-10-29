@@ -199,7 +199,7 @@ class Library extends EventEmitter {
       s[a.kind === 'video' ? 'videos' : 'photos']++;
       if (date && (!s.from || date < s.from)) s.from = date;
       if (date && date > s.to) s.to = date;
-      if (a.hasThumbnail && s.covers.length < 3) s.covers.push(a.id);
+      if (a.hasThumbnail && s.covers.length < 3) s.covers.push({ id: a.id, modifiedTime: a.modifiedTime });
       map.set(id, s);
       return s;
     };

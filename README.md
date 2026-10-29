@@ -65,7 +65,7 @@ The server only serves files that are in the index.
 | `SESSION_SECRET` | with sign-in | Random string that signs sessions (use Secret Manager); without it, restarts sign everyone out |
 | `DAM_PASSWORD` | no | Shared password (browser login prompt, any username), used only when Google sign-in is off |
 | `REFRESH_MINUTES` | no | Re-scan interval, default `10` |
-| `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`), usage rights (`rights.json`), Claude's suggestions (`suggestions.json`) and the last synced asset list (`index.json`). Without it, all of these are lost on every restart or deploy. `RIGHTS_BUCKET` is accepted as an older name |
+| `DATA_BUCKET` | no | Cloud Storage bucket for metadata (`tags.json`), usage rights (`rights.json`), Claude's suggestions (`suggestions.json`), ratings, favorites and collections (`curation.json`), the last synced asset list (`index.json`) and cached previews (`thumbs/`). Without it, all of these are lost on every restart or deploy. `RIGHTS_BUCKET` is accepted as an older name |
 | `SYNC_CONCURRENCY` | no | Drive folders listed in parallel during a sync, default `8` |
 | `ANTHROPIC_API_KEY` | no | Claude API key. Turns on tag suggestions |
 | `SUGGEST_MODEL` | no | Claude model for suggestions, default `claude-haiku-5-5` (`claude-sonnet-5-5` or `claude-opus-5-5` for higher accuracy at higher cost) |
@@ -107,6 +107,20 @@ Identity-Aware Proxy and drop `DAM_PASSWORD`.
 
 The included `Dockerfile` also runs on any container host (Fly.io, Render, Railway).
 There, pass the key through `GOOGLE_SERVICE_ACCOUNT_JSON`.
+
+## Speed
+
+- Previews come from Drive once per size (256, 512, 1024 or 2048 px, rounded up from what's
+  displayed), then from memory or the bucket's `thumbs/` folder. Each preview URL carries the file's
+  version, so browsers keep previews until the file changes in Drive.
+- The grid asks for the size each tile needs (row height, shape and screen density); dragging the
+  size slider larger swaps in bigger previews.
+- The viewer opens on the grid's preview and sharpens when the large one arrives; the previews
+  either side are loaded in the background, so ← → is instant.
+- API responses are compressed.
+
+`thumbs/` grows with use (a few hundred KB per photo across sizes). To cap it, add a lifecycle rule
+to the bucket that deletes objects under `thumbs/` after, say, 180 days; they're refetched on demand.
 
 ## Folders and metadata
 

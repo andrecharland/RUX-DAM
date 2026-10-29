@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
 const express = require('express');
+const compression = require('compression');
 const { createAuth } = require('./google');
 const { DriveClient } = require('./drive');
 const { Library } = require('./library');
@@ -16,6 +17,7 @@ const { ORDER: FILE_FACET_ORDER } = require('./fileinfo');
 const { googleSignIn } = require('./auth');
 const { VertexEmbedder, EmbeddingIndex } = require('./embeddings');
 const { tagSimilar } = require('./similar');
+const { ThumbCache, snapSize, thumbVersion } = require('./thumbcache');
 
 function parseFolderIds(value = '') {
   // Accept bare IDs or full Drive folder URLs, comma or whitespace separated.
@@ -57,9 +59,11 @@ async function pipeDrive(driveRes, res, passHeaders) {
 
 // Access: Google sign-in (`signIn`, see auth.js) when configured, otherwise the
 // optional shared password.
-function createApp({ library, drive, password, suggester, signIn, similarity }) {
+function createApp({ library, drive, password, suggester, signIn, similarity, thumbs = new ThumbCache() }) {
   const app = express();
   app.disable('x-powered-by');
+  // Gzip JSON, HTML, CSS and JS (images and video are already compressed and skipped).
+  app.use(compression());
   // Whose favorites: the signed-in person, or everyone together without sign-in.
   const who = (req) => req.user?.email || '';
 
@@ -179,7 +183,8 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
       id: c.id, name: c.name, description: c.description, createdBy: c.createdBy, createdAt: c.createdAt, updatedAt: c.updatedAt,
       count: items.length,
       items,
-      covers: items.filter((id) => library.byId.get(id).hasThumbnail).slice(0, 3),
+      covers: items.map((id) => library.byId.get(id)).filter((a) => a.hasThumbnail).slice(0, 3)
+        .map((a) => ({ id: a.id, modifiedTime: a.modifiedTime })),
     };
   };
 
@@ -379,13 +384,25 @@ function createApp({ library, drive, password, suggester, signIn, similarity }) 
   // to read arbitrary Drive files the service account can see.
   const known = (req, res, next) => (library.has(req.params.id) ? next() : res.sendStatus(404));
 
+  // Previews, rounded up to a standard size and cached (see thumbcache.js). With
+  // ?v= matching the file's version the browser may keep it for good: a change
+  // in Drive changes the version, and so the URL.
   app.get('/api/assets/:id/thumbnail', known, async (req, res, next) => {
     try {
-      const size = Math.min(Number(req.query.size) || 400, 2560);
-      const driveRes = await drive.thumbnail(req.params.id, size);
-      if (!driveRes || !driveRes.ok) return res.sendStatus(404);
-      res.set('Cache-Control', 'private, max-age=3600');
-      await pipeDrive(driveRes, res, ['content-type', 'content-length']);
+      const asset = library.byId.get(req.params.id);
+      const size = snapSize(Number(req.query.size) || 400);
+      const v = thumbVersion(asset);
+      const preview = await thumbs.fetch(`thumbs/${asset.id}/${v}-${size}`, async () => {
+        const driveRes = await drive.thumbnail(asset.id, size);
+        if (!driveRes?.ok) {
+          await driveRes?.body?.cancel();
+          return null;
+        }
+        return { body: Buffer.from(await driveRes.arrayBuffer()), type: driveRes.headers.get('content-type') || 'image/jpeg' };
+      });
+      if (!preview) return res.sendStatus(404);
+      res.set('Cache-Control', req.query.v === v ? 'private, max-age=31536000, immutable' : 'private, max-age=3600');
+      res.type(preview.type).send(preview.body);
     } catch (err) {
       next(err);
     }
@@ -435,6 +452,7 @@ if (require.main === module) {
     // The last synced asset list, so restarts don't start from an empty grid.
     index: bucket ? new JsonStore({ auth, bucket, object: 'index.json', empty: () => ({ assets: [], folders: [] }) }) : null,
   });
+  const thumbs = new ThumbCache({ auth, bucket });
   const suggester = new Suggester({
     library,
     drive,
@@ -483,7 +501,7 @@ if (require.main === module) {
       console.warn('Google sign-in is on but ALLOWED_DOMAINS and ALLOWED_EMAILS are empty: nobody can sign in.');
     }
   }
-  const app = createApp({ library, drive, suggester, signIn, similarity, password: process.env.DAM_PASSWORD });
+  const app = createApp({ library, drive, suggester, signIn, similarity, thumbs, password: process.env.DAM_PASSWORD });
   const port = Number(process.env.PORT) || 8080;
   app.listen(port, () => console.log(`RUX DAM listening on :${port}`));
 }

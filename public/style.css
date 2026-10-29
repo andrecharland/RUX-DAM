@@ -466,3 +466,6 @@ dialog.vocab { width: min(560px, 100vw - 32px); height: fit-content; max-height:
 .bulk-curate select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 /* Thumbnails that couldn't load: a quiet placeholder instead of the broken-image icon. */
 img.failed { visibility: hidden; }
+/* The viewer shows the grid preview first, softened until the sharp one arrives. */
+.stage > img.soft { filter: blur(3px); }
+.stage > img { transition: filter .2s; }

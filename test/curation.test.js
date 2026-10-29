@@ -63,7 +63,7 @@ test('ratings, personal favorites and team collections', async () => {
     assert.strictEqual((await post('/api/collections', { name: '  ' })).status, 400);
     const c = await (await post('/api/collections', { name: 'Spring launch', ids: ['a3', 'a1', 'gone'] })).json();
     assert.strictEqual(c.count, 2);
-    assert.deepStrictEqual(c.covers, ['a3', 'a1']);
+    assert.deepStrictEqual(c.covers.map((x) => x.id), ['a3', 'a1']);
     await post(`/api/collections/${c.id}`, { add: ['a2', 'a3'], remove: ['a1'], description: 'Hero shots' }, 'ben@rux.life');
     assert.deepStrictEqual(await ids(`collection=${c.id}`), ['a3', 'a2']);
     assert.deepStrictEqual(await ids(`collection=${c.id}&sort=name`), ['a2', 'a3'], 'another sort still applies');
